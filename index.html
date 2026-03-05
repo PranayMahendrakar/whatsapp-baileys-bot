@@ -29,12 +29,13 @@
     .ci-time{font-size:11px;color:#8696a0;flex-shrink:0}
     #main{flex:1;display:flex;flex-direction:column;overflow:hidden}
     #qr-screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:40px}
-    #qr-screen h2{font-size:20px;color:#e9edef}
-    #qr-screen p{color:#8696a0;text-align:center;max-width:400px;line-height:1.5}
-    #qr-img{width:260px;height:260px;border:4px solid #00a884;border-radius:12px;background:#fff;display:none}
+    #qr-screen h2{font-size:22px;color:#e9edef;font-weight:600}
+    #qr-screen p{color:#8696a0;text-align:center;max-width:440px;line-height:1.6;font-size:14px}
+    #qr-img{width:280px;height:280px;border:4px solid #00a884;border-radius:12px;background:#fff;display:none;image-rendering:pixelated}
     #qr-spinner{width:60px;height:60px;border:4px solid #2a3942;border-top-color:#00a884;border-radius:50%;animation:spin 1s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
-    #qr-status{font-size:14px;color:#8696a0}
+    #qr-status{font-size:14px;color:#8696a0;text-align:center;max-width:440px;line-height:1.6}
+    #countdown{font-size:13px;color:#ffd700;font-weight:600;margin-top:-8px}
     #chat-header{background:#1f2c33;padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #2a3942;flex-shrink:0}
     #chat-header .av{width:40px;height:40px;font-size:16px}
     #chat-title{font-size:16px;font-weight:600}
@@ -51,28 +52,25 @@
     #send-btn{background:#00a884;border:none;border-radius:8px;padding:10px 20px;color:#fff;font-size:15px;cursor:pointer;font-weight:600;transition:background .15s}
     #send-btn:hover{background:#017561}
     #send-btn:disabled{background:#2a3942;color:#8696a0;cursor:not-allowed}
-    #no-chat{flex:1;display:flex;align-items:center;justify-content:center;color:#8696a0;font-size:15px}
-    .empty-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#8696a0}
-    .empty-main svg{opacity:.2}
+    .empty-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#8696a0;font-size:15px}
     #refresh-btn{background:#2a3942;border:none;border-radius:8px;padding:8px 16px;color:#e9edef;cursor:pointer;font-size:13px}
     #refresh-btn:hover{background:#374a55}
-    #tunnel-info{font-size:11px;color:#8696a0;text-align:center}
   </style>
 </head>
 <body>
   <div id="top-bar">
     <h1>📱 WhatsApp Bot UI</h1>
-    <span id="conn-status" class="waiting">⏳ Connecting…</span>
+    <span id="conn-status">⏳ Loading…</span>
     <button id="refresh-btn" onclick="location.reload()">↻ Refresh</button>
   </div>
 
-  <!-- QR Screen (shown until bot connects) -->
+  <!-- QR Screen -->
   <div id="qr-screen">
     <h2>Scan QR to Connect WhatsApp</h2>
     <div id="qr-spinner"></div>
-    <img id="qr-img" alt="QR Code" crossorigin="anonymous"/>
-    <p id="qr-status">⏳ Waiting for GitHub Actions bot to start…<br>Trigger a workflow run from the Actions tab if needed.</p>
-    <p id="tunnel-info"></p>
+    <img id="qr-img" alt="QR Code"/>
+    <p id="qr-status">⏳ Waiting for bot to start on GitHub Actions…<br>Start the workflow from the Actions tab if needed.</p>
+    <div id="countdown"></div>
   </div>
 
   <!-- Main Chat App (hidden until connected) -->
@@ -85,7 +83,7 @@
     </div>
     <div id="main">
       <div class="empty-main" id="no-chat-msg">
-        <svg width="80" height="80" viewBox="0 0 24 24" fill="#e9edef"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+        <svg width="80" height="80" viewBox="0 0 24 24" fill="#e9edef" style="opacity:.15"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
         <span>Select a chat to start messaging</span>
       </div>
       <div id="chat-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
@@ -103,92 +101,112 @@
   </div>
 
 <script>
-// ── Config ─────────────────────────────────────────────────────────────────
-const REPO_RAW  = 'https://raw.githubusercontent.com/PranayMahendrakar/whatsapp-baileys-bot/main';
-const STATUS_URL = REPO_RAW + '/status.json';
-const QR_URL     = REPO_RAW + '/qr.png';
+const REPO  = 'PranayMahendrakar';
+const RNAME = 'whatsapp-baileys-bot';
+const RAW   = 'https://raw.githubusercontent.com/' + REPO + '/' + RNAME + '/main';
 
 let tunnelBase = null;
 let currentJid = null;
 let chats = {};
+let qrExpireTimer = null;
+let qrCountdown = 30;
 let pollTimer = null;
 let msgPollTimer = null;
-let statusPollTimer = null;
 
-// ── Status polling ──────────────────────────────────────────────────────────
+// ── Poll status.json from repo (every 4s) ───────────────────────────────────
 async function pollStatus() {
   try {
-    const r = await fetch(STATUS_URL + '?t=' + Date.now());
-    if (!r.ok) throw new Error('no status.json yet');
+    const r = await fetch(RAW + '/status.json?t=' + Date.now());
+    if (!r.ok) throw new Error('no status.json');
     const s = await r.json();
-
-    document.getElementById('tunnel-info').textContent =
-      s.url ? '🔗 Tunnel: ' + s.url : '';
 
     if (s.connected && s.url) {
       tunnelBase = s.url;
       showApp();
-      clearInterval(statusPollTimer);
-      startAppPolling();
       return;
     }
 
-    // Not connected yet — check for QR code
-    const connStatus = document.getElementById('conn-status');
-    if (s.url) {
-      connStatus.textContent = '📱 Scan QR code';
-      connStatus.className = 'waiting';
-      // Try to load QR image
-      showQR();
+    // Show QR if available
+    const cs = document.getElementById('conn-status');
+    const spin = document.getElementById('qr-spinner');
+    const img = document.getElementById('qr-img');
+
+    if (s.qr) {
+      // QR is a base64 data URL embedded in status.json
+      img.src = s.qr;
+      img.style.display = 'block';
+      spin.style.display = 'none';
+      cs.textContent = '📱 Scan QR code';
+      cs.className = 'waiting';
+      document.getElementById('qr-status').innerHTML =
+        '📱 Scan with WhatsApp → <b>Settings → Linked Devices → Link a Device</b><br>' +
+        'QR refreshes automatically when it expires.';
+      // Start countdown
+      startQrCountdown();
+    } else if (s.url) {
+      cs.textContent = '⏳ Bot starting…';
+      cs.className = '';
+      spin.style.display = 'block';
+      img.style.display = 'none';
+      document.getElementById('qr-status').textContent = '🔄 Bot is running, generating QR code…';
     } else {
-      connStatus.textContent = '⏳ Bot starting…';
-      connStatus.className = '';
+      cs.textContent = '⏳ Bot offline';
+      cs.className = '';
+      spin.style.display = 'block';
+      img.style.display = 'none';
+      document.getElementById('qr-status').innerHTML =
+        '⚠️ Bot is not running.<br>Go to <a href="https://github.com/' + REPO + '/' + RNAME + '/actions" target="_blank" style="color:#00a884">GitHub Actions</a> and click <b>Run workflow</b>.';
     }
   } catch(e) {
-    // status.json not available yet
-    document.getElementById('conn-status').textContent = '⏳ Bot starting…';
+    document.getElementById('conn-status').textContent = '⏳ Loading…';
   }
 }
 
-function showQR() {
-  const img = document.getElementById('qr-img');
-  const spin = document.getElementById('qr-spinner');
-  img.src = QR_URL + '?t=' + Date.now();
-  img.onload = () => {
-    spin.style.display = 'none';
-    img.style.display = 'block';
-    document.getElementById('qr-status').textContent = '📱 Scan this QR code with your phone → WhatsApp > Linked Devices > Link a Device';
-  };
-  img.onerror = () => {
-    spin.style.display = 'block';
-    img.style.display = 'none';
-    document.getElementById('qr-status').textContent = '⏳ Waiting for QR code to be generated…';
-  };
+function startQrCountdown() {
+  if (qrExpireTimer) clearInterval(qrExpireTimer);
+  qrCountdown = 30;
+  updateCountdown();
+  qrExpireTimer = setInterval(() => {
+    qrCountdown--;
+    updateCountdown();
+    if (qrCountdown <= 0) {
+      clearInterval(qrExpireTimer);
+      qrExpireTimer = null;
+      document.getElementById('countdown').textContent = '🔄 Waiting for new QR…';
+      document.getElementById('qr-img').style.display = 'none';
+      document.getElementById('qr-spinner').style.display = 'block';
+    }
+  }, 1000);
+}
+
+function updateCountdown() {
+  const el = document.getElementById('countdown');
+  if (qrCountdown > 0) {
+    el.textContent = '⏱ Expires in ' + qrCountdown + 's';
+  }
 }
 
 function showApp() {
+  if (qrExpireTimer) clearInterval(qrExpireTimer);
   document.getElementById('qr-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   const cs = document.getElementById('conn-status');
   cs.textContent = '🟢 Connected';
   cs.className = 'connected';
   loadChats();
-}
-
-// ── App polling ─────────────────────────────────────────────────────────────
-function startAppPolling() {
-  pollTimer = setInterval(loadChats, 8000);
-  // Also keep checking status for disconnection
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(loadChats, 6000);
+  // Keep checking if bot disconnects
   setInterval(async () => {
     try {
-      const r = await fetch(STATUS_URL + '?t=' + Date.now());
+      const r = await fetch(RAW + '/status.json?t=' + Date.now());
       const s = await r.json();
       if (!s.connected) location.reload();
     } catch(_){}
   }, 15000);
 }
 
-// ── API calls ───────────────────────────────────────────────────────────────
+// ── API helpers ─────────────────────────────────────────────────────────────
 async function api(path, opts) {
   if (!tunnelBase) return null;
   const r = await fetch(tunnelBase + path, {
@@ -206,35 +224,27 @@ async function loadChats() {
     chats = {};
     data.forEach(c => { chats[c.jid] = c; });
     renderChatList(data);
-  } catch(e) {
-    console.error('loadChats error:', e);
-  }
+  } catch(e) { console.error('loadChats:', e); }
 }
 
 function renderChatList(list) {
-  const el = document.getElementById('chat-list');
   const q = document.getElementById('search-input').value.toLowerCase();
   const filtered = q ? list.filter(c => (c.name||c.jid).toLowerCase().includes(q)) : list;
-  el.innerHTML = filtered.map(c => {
+  document.getElementById('chat-list').innerHTML = filtered.map(c => {
     const name = c.name || c.jid.split('@')[0];
-    const initial = name[0].toUpperCase();
-    const preview = c.lastMessage || '';
     const time = c.lastTimestamp ? new Date(c.lastTimestamp*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
-    const active = c.jid === currentJid ? 'active' : '';
-    return `<div class="ci ${active}" onclick="openChat('${c.jid}')">
-      <div class="av">${initial}</div>
+    return `<div class="ci ${c.jid===currentJid?'active':''}" onclick="openChat('${esc(c.jid)}')">
+      <div class="av">${esc(name[0].toUpperCase())}</div>
       <div class="ci-info">
-        <div class="ci-name">${escHtml(name)}</div>
-        <div class="ci-preview">${escHtml(preview)}</div>
+        <div class="ci-name">${esc(name)}</div>
+        <div class="ci-preview">${esc(c.lastMessage||'')}</div>
       </div>
       <div class="ci-time">${time}</div>
     </div>`;
   }).join('');
 }
 
-function filterChats(q) {
-  renderChatList(Object.values(chats));
-}
+function filterChats(q) { renderChatList(Object.values(chats)); }
 
 async function openChat(jid) {
   currentJid = jid;
@@ -246,31 +256,25 @@ async function openChat(jid) {
   const cv = document.getElementById('chat-view');
   cv.style.display = 'flex';
   document.getElementById('send-btn').disabled = false;
-  // Re-render list to show active
   renderChatList(Object.values(chats));
   await loadMessages(jid);
   if (msgPollTimer) clearInterval(msgPollTimer);
-  msgPollTimer = setInterval(() => loadMessages(jid), 4000);
+  msgPollTimer = setInterval(() => loadMessages(jid), 3000);
 }
 
 async function loadMessages(jid) {
   try {
     const msgs = await api('/api/chats/' + encodeURIComponent(jid) + '/messages');
     if (!msgs) return;
-    renderMessages(msgs);
+    const el = document.getElementById('msg-area');
+    const atBottom = el.scrollHeight - el.clientHeight <= el.scrollTop + 60;
+    el.innerHTML = msgs.map(m => {
+      const time = m.timestamp ? new Date(m.timestamp*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
+      const sender = !m.fromMe && m.pushName ? `<div style="font-size:12px;color:#00a884;margin-bottom:2px">${esc(m.pushName)}</div>` : '';
+      return `<div class="msg ${m.fromMe?'out':'in'}">${sender}${esc(m.text)}<div class="ts">${time}</div></div>`;
+    }).join('');
+    if (atBottom) el.scrollTop = el.scrollHeight;
   } catch(e) {}
-}
-
-function renderMessages(msgs) {
-  const el = document.getElementById('msg-area');
-  const wasAtBottom = el.scrollHeight - el.clientHeight <= el.scrollTop + 50;
-  el.innerHTML = msgs.map(m => {
-    const cls = m.fromMe ? 'out' : 'in';
-    const time = m.timestamp ? new Date(m.timestamp*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
-    const sender = !m.fromMe && m.pushName ? `<div style="font-size:12px;color:#00a884;margin-bottom:2px">${escHtml(m.pushName)}</div>` : '';
-    return `<div class="msg ${cls}">${sender}${escHtml(m.text)}<div class="ts">${time}</div></div>`;
-  }).join('');
-  if (wasAtBottom) el.scrollTop = el.scrollHeight;
 }
 
 async function sendMessage() {
@@ -281,32 +285,27 @@ async function sendMessage() {
   document.getElementById('send-btn').disabled = true;
   try {
     await api('/api/chats/' + encodeURIComponent(currentJid) + '/send', {
-      method: 'POST',
-      body: JSON.stringify({ text })
+      method: 'POST', body: JSON.stringify({ text })
     });
     await loadMessages(currentJid);
-  } catch(e) {
-    alert('Failed to send: ' + e.message);
-  } finally {
+  } catch(e) { alert('Send failed: ' + e.message); }
+  finally {
     document.getElementById('send-btn').disabled = false;
     input.focus();
   }
 }
 
 function handleKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 }
 
-function escHtml(s) {
+function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── Boot ────────────────────────────────────────────────────────────────────
+// ── Boot: poll status.json every 4s ─────────────────────────────────────────
 pollStatus();
-statusPollTimer = setInterval(pollStatus, 5000);
+setInterval(pollStatus, 4000);
 </script>
 </body>
 </html>
