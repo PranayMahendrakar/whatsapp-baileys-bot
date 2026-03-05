@@ -1,14 +1,11 @@
-// index.js - WhatsApp Bot Entry Point
-// Educational project using @whiskeysockets/baileys
+// index.js - Entry point: starts Web UI server + WhatsApp bot
+import { startServer } from './src/server.js';
+import { startBot }    from './src/bot.js';
 
-import { startBot } from './src/bot.js';
-
-console.log('🚀 Starting WhatsApp Bot...');
-console.log('📚 Educational WhatsApp Automation Bot');
-console.log('⚠️  For educational purposes only');
+console.log('WhatsApp Baileys Bot + Web UI');
+console.log('Educational project - PranayMahendrakar');
 console.log('');
 
-startBot().catch((err) => {
-  console.error('❌ Fatal error:', err);
-  process.exit(1);
-});
+startServer()
+  .then(() => startBot())
+  .catch(err => { console.error('Fatal:', err); process.exit(1); });
