@@ -1,99 +1,84 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>WhatsApp Bot UI</title>
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0b141a;color:#e9edef;height:100vh;display:flex;flex-direction:column;overflow:hidden}
-    #top-bar{background:#1f2c33;padding:12px 20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #2a3942;flex-shrink:0}
-    #top-bar h1{font-size:17px;font-weight:600;flex:1}
-    #conn-badge{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;background:#2a3942;color:#8696a0}
-    #conn-badge.connected{background:#00a884;color:#111}
-    #conn-badge.waiting{background:#ffd700;color:#111}
-    #app{display:flex;flex:1;overflow:hidden}
-    #sidebar{width:340px;min-width:280px;background:#111b21;display:flex;flex-direction:column;border-right:1px solid #2a3942}
-    #sidebar-search{padding:8px 12px;background:#111b21;border-bottom:1px solid #2a3942}
-    #sidebar-search input{width:100%;padding:8px 14px;background:#202c33;border:none;border-radius:8px;color:#e9edef;font-size:14px;outline:none}
-    #sidebar-search input::placeholder{color:#8696a0}
-    #chat-list{flex:1;overflow-y:auto}
-    #chat-list::-webkit-scrollbar{width:5px}
-    #chat-list::-webkit-scrollbar-thumb{background:#2a3942}
-    .ci{padding:13px 16px;cursor:pointer;border-bottom:1px solid #1f2c33;display:flex;align-items:center;gap:12px;transition:background .15s}
-    .ci:hover,.ci.active{background:#2a3942}
-    .av{width:46px;height:46px;border-radius:50%;background:#00a884;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700;color:#111;flex-shrink:0}
-    .ci-info{flex:1;min-width:0}
-    .ci-name{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .ci-preview{font-size:13px;color:#8696a0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
-    .ci-time{font-size:11px;color:#8696a0;flex-shrink:0}
-    #main{flex:1;display:flex;flex-direction:column;overflow:hidden}
-    /* ── Pairing screen ── */
-    #pair-screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:40px;text-align:center}
-    #pair-screen h2{font-size:22px;font-weight:700}
-    .steps{background:#1f2c33;border-radius:12px;padding:20px 28px;text-align:left;max-width:420px;width:100%}
-    .steps ol{padding-left:20px;line-height:2.2;font-size:15px;color:#e9edef}
-    .steps ol li b{color:#00a884}
-    #code-box{background:#1f2c33;border:2px solid #00a884;border-radius:16px;padding:24px 40px;min-width:300px}
-    #code-box .label{font-size:12px;color:#8696a0;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
-    #code-val{font-size:42px;font-weight:900;letter-spacing:8px;color:#00a884;font-family:monospace}
-    #code-spinner{width:40px;height:40px;border:3px solid #2a3942;border-top-color:#00a884;border-radius:50%;animation:spin 1s linear infinite}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    #code-status{font-size:14px;color:#8696a0;max-width:420px;line-height:1.6}
-    #error-box{background:#2a1f1f;border:1px solid #8b2222;border-radius:10px;padding:14px 20px;color:#ff6b6b;font-size:13px;max-width:420px;display:none}
-    /* ── Chat screen ── */
-    #chat-header{background:#1f2c33;padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #2a3942;flex-shrink:0}
-    #chat-header .av{width:40px;height:40px;font-size:16px}
-    #chat-title{font-size:16px;font-weight:600}
-    #msg-area{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:4px;background:#0b141a}
-    #msg-area::-webkit-scrollbar{width:5px}
-    #msg-area::-webkit-scrollbar-thumb{background:#2a3942}
-    .msg{max-width:65%;padding:8px 12px;border-radius:8px;font-size:14.5px;line-height:1.45;word-break:break-word}
-    .msg.in{background:#1f2c33;align-self:flex-start;border-top-left-radius:2px}
-    .msg.out{background:#005c4b;align-self:flex-end;border-top-right-radius:2px}
-    .msg .ts{font-size:11px;color:#8696a0;margin-top:4px;text-align:right}
-    #input-bar{background:#1f2c33;padding:10px 16px;display:flex;gap:10px;border-top:1px solid #2a3942;flex-shrink:0}
-    #msg-input{flex:1;background:#2a3942;border:none;border-radius:8px;padding:10px 14px;color:#e9edef;font-size:15px;outline:none;resize:none;max-height:120px;overflow-y:auto}
-    #msg-input::placeholder{color:#8696a0}
-    #send-btn{background:#00a884;border:none;border-radius:8px;padding:10px 20px;color:#fff;font-size:15px;cursor:pointer;font-weight:600}
-    #send-btn:hover{background:#017561}
-    #send-btn:disabled{background:#2a3942;color:#8696a0;cursor:not-allowed}
-    .empty-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#8696a0;font-size:15px}
-    #refresh-btn{background:#2a3942;border:none;border-radius:8px;padding:8px 16px;color:#e9edef;cursor:pointer;font-size:13px}
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>WhatsApp Bot UI</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0b141a;color:#e9edef;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+#top-bar{background:#1f2c33;padding:12px 20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #2a3942;flex-shrink:0}
+#top-bar h1{font-size:17px;font-weight:600;flex:1}
+#conn-status{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;background:#2a3942;color:#8696a0}
+#conn-status.connected{background:#00a884;color:#111}
+#conn-status.waiting{background:#ffd700;color:#111}
+#app{display:flex;flex:1;overflow:hidden}
+#sidebar{width:340px;min-width:280px;background:#111b21;display:flex;flex-direction:column;border-right:1px solid #2a3942}
+#sidebar-search{padding:8px 12px;background:#111b21;border-bottom:1px solid #2a3942}
+#sidebar-search input{width:100%;padding:8px 14px;background:#202c33;border:none;border-radius:8px;color:#e9edef;font-size:14px;outline:none}
+#sidebar-search input::placeholder{color:#8696a0}
+#chat-list{flex:1;overflow-y:auto}
+#chat-list::-webkit-scrollbar{width:5px}
+#chat-list::-webkit-scrollbar-thumb{background:#2a3942}
+.ci{padding:13px 16px;cursor:pointer;border-bottom:1px solid #1f2c33;display:flex;align-items:center;gap:12px;transition:background .15s}
+.ci:hover,.ci.active{background:#2a3942}
+.av{width:46px;height:46px;border-radius:50%;background:#00a884;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700;color:#111;flex-shrink:0}
+.ci-info{flex:1;min-width:0}
+.ci-name{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ci-preview{font-size:13px;color:#8696a0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.ci-time{font-size:11px;color:#8696a0;flex-shrink:0}
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+/* QR Screen */
+#qr-screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:40px}
+#qr-screen h2{font-size:22px;color:#e9edef}
+#qr-screen p{color:#8696a0;text-align:center;max-width:420px;line-height:1.6;font-size:14px}
+#qr-img{width:260px;height:260px;border:4px solid #00a884;border-radius:12px;background:#fff;display:none;image-rendering:pixelated}
+#qr-spinner{width:60px;height:60px;border:4px solid #2a3942;border-top-color:#00a884;border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#qr-status{font-size:14px;color:#8696a0;text-align:center;max-width:400px}
+#qr-timer{font-size:13px;color:#ffd700;font-weight:600}
+/* Chat area */
+#chat-header{background:#1f2c33;padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #2a3942;flex-shrink:0}
+#chat-header .av{width:40px;height:40px;font-size:16px}
+#chat-title{font-size:16px;font-weight:600}
+#msg-area{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:4px;background:#0b141a}
+#msg-area::-webkit-scrollbar{width:5px}
+#msg-area::-webkit-scrollbar-thumb{background:#2a3942}
+.msg{max-width:65%;padding:8px 12px;border-radius:8px;font-size:14.5px;line-height:1.45;position:relative;word-break:break-word}
+.msg.in{background:#1f2c33;align-self:flex-start;border-top-left-radius:2px}
+.msg.out{background:#005c4b;align-self:flex-end;border-top-right-radius:2px}
+.msg .ts{font-size:11px;color:#8696a0;margin-top:4px;text-align:right}
+#input-bar{background:#1f2c33;padding:10px 16px;display:flex;gap:10px;border-top:1px solid #2a3942;flex-shrink:0}
+#msg-input{flex:1;background:#2a3942;border:none;border-radius:8px;padding:10px 14px;color:#e9edef;font-size:15px;outline:none;resize:none;max-height:120px;overflow-y:auto}
+#msg-input::placeholder{color:#8696a0}
+#send-btn{background:#00a884;border:none;border-radius:8px;padding:10px 20px;color:#fff;font-size:15px;cursor:pointer;font-weight:600;transition:background .15s}
+#send-btn:hover{background:#017561}
+#send-btn:disabled{background:#2a3942;color:#8696a0;cursor:not-allowed}
+#no-chat-msg{flex:1;display:flex;align-items:center;justify-content:center;color:#8696a0;font-size:15px}
+.empty-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#8696a0}
+#refresh-btn{background:#2a3942;border:none;border-radius:8px;padding:8px 16px;color:#e9edef;cursor:pointer;font-size:13px}
+#refresh-btn:hover{background:#374a55}
+#tunnel-info{font-size:11px;color:#555;text-align:center}
+</style>
 </head>
 <body>
 <div id="top-bar">
   <h1>📱 WhatsApp Bot UI</h1>
-  <span id="conn-badge">⏳ Loading…</span>
+  <span id="conn-status" class="waiting">⏳ Connecting…</span>
   <button id="refresh-btn" onclick="location.reload()">↻ Refresh</button>
 </div>
 
-<!-- Pairing code screen -->
-<div id="pair-screen">
-  <h2>Link WhatsApp with Pairing Code</h2>
-
-  <div id="code-box">
-    <div class="label">Your pairing code</div>
-    <div id="code-spinner"></div>
-    <div id="code-val" style="display:none">----</div>
-  </div>
-
-  <div id="code-status">⏳ Waiting for bot to start on GitHub Actions…</div>
-  <div id="error-box"></div>
-
-  <div class="steps">
-    <ol>
-      <li>Wait for the <b>8-digit code</b> to appear above</li>
-      <li>Open <b>WhatsApp</b> on your phone</li>
-      <li>Go to <b>Settings → Linked Devices → Link a Device</b></li>
-      <li>Tap <b>"Link with phone number instead"</b></li>
-      <li>Enter the code shown above</li>
-    </ol>
-  </div>
+<!-- QR Screen -->
+<div id="qr-screen">
+  <h2>Scan QR to Connect WhatsApp</h2>
+  <div id="qr-spinner"></div>
+  <img id="qr-img" alt="QR Code"/>
+  <p id="qr-status">⏳ Waiting for GitHub Actions bot to generate QR code…<br>Run the workflow from the Actions tab if not started.</p>
+  <p id="qr-timer"></p>
+  <p id="tunnel-info"></p>
 </div>
 
-<!-- Chat app (hidden until connected) -->
+<!-- Main Chat App -->
 <div id="app" style="display:none">
   <div id="sidebar">
     <div id="sidebar-search">
@@ -103,7 +88,7 @@
   </div>
   <div id="main">
     <div class="empty-main" id="no-chat-msg">
-      <svg width="80" height="80" viewBox="0 0 24 24" fill="#e9edef" style="opacity:.12"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+      <svg width="80" height="80" viewBox="0 0 24 24" fill="#e9edef" opacity=".2"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
       <span>Select a chat to start messaging</span>
     </div>
     <div id="chat-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
@@ -121,76 +106,105 @@
 </div>
 
 <script>
-const RAW = 'https://raw.githubusercontent.com/PranayMahendrakar/whatsapp-baileys-bot/main';
-let tunnelBase = null, currentJid = null, chats = {}, msgTimer = null, chatTimer = null;
-let lastCode = null;
+// Config
+const REPO_RAW   = 'https://raw.githubusercontent.com/PranayMahendrakar/whatsapp-baileys-bot/main';
+const STATUS_URL = REPO_RAW + '/status.json';
 
+let tunnelBase     = null;
+let currentJid     = null;
+let chats          = {};
+let pollTimer      = null;
+let msgPollTimer   = null;
+let statusTimer    = null;
+let lastQrTs       = 0;
+
+// ── Status polling ─────────────────────────────────────────────────────────
 async function pollStatus() {
   try {
-    const r = await fetch(RAW + '/status.json?t=' + Date.now());
-    if (!r.ok) return;
+    const r = await fetch(STATUS_URL + '?t=' + Date.now());
+    if (!r.ok) throw new Error('status.json not ready');
     const s = await r.json();
 
-    const badge = document.getElementById('conn-badge');
-
-    if (s.error) {
-      document.getElementById('code-spinner').style.display = 'none';
-      document.getElementById('code-val').style.display = 'none';
-      const eb = document.getElementById('error-box');
-      eb.style.display = 'block';
-      eb.textContent = '❌ ' + s.error;
-      badge.textContent = '❌ Error';
-      document.getElementById('code-status').textContent = 'Fix the error and re-run the workflow.';
-      return;
-    }
+    document.getElementById('tunnel-info').textContent =
+      s.url ? '🔗 API: ' + s.url : '';
 
     if (s.connected && s.url) {
       tunnelBase = s.url;
       showApp();
+      clearInterval(statusTimer);
+      startAppPolling();
       return;
     }
 
-    if (s.pairingCode) {
-      if (s.pairingCode !== lastCode) {
-        lastCode = s.pairingCode;
-        document.getElementById('code-spinner').style.display = 'none';
-        document.getElementById('code-val').style.display = 'block';
-        document.getElementById('code-val').textContent = s.pairingCode;
-        badge.textContent = '🔑 Enter code';
-        badge.className = 'waiting';
-        document.getElementById('code-status').innerHTML =
-          '👆 Enter this code in WhatsApp → Settings → Linked Devices → Link a Device<br>' +
-          '→ tap <b style="color:#00a884">Link with phone number instead</b>';
-        document.getElementById('error-box').style.display = 'none';
-      }
+    const cs = document.getElementById('conn-status');
+
+    // Show QR if available
+    if (s.qr) {
+      cs.textContent = '📱 Scan QR code';
+      cs.className = 'waiting';
+      showQRImage(s.qr, s.ts);
     } else if (s.url) {
-      badge.textContent = '⏳ Generating code…';
-      document.getElementById('code-status').textContent = '🔄 Bot is running, requesting pairing code…';
+      cs.textContent = '⏳ Bot starting…';
+      cs.className = '';
+      document.getElementById('qr-status').textContent =
+        '⏳ Bot is starting up, QR code will appear shortly…';
     } else {
-      badge.textContent = '⏳ Bot offline';
-      document.getElementById('code-status').innerHTML =
-        '⚠️ Bot is not running. Go to <a href="https://github.com/PranayMahendrakar/whatsapp-baileys-bot/actions" target="_blank" style="color:#00a884">GitHub Actions</a> → <b>Run workflow</b>.';
+      cs.textContent = '⏳ Bot starting…';
+      cs.className = '';
     }
-  } catch(e) {}
+  } catch(e) {
+    document.getElementById('conn-status').textContent = '⏳ Waiting for bot…';
+  }
+}
+
+function showQRImage(dataUrl, ts) {
+  const img  = document.getElementById('qr-img');
+  const spin = document.getElementById('qr-spinner');
+
+  if (ts === lastQrTs && img.style.display === 'block') return; // same QR, skip
+  lastQrTs = ts;
+
+  img.src = dataUrl;
+  spin.style.display = 'none';
+  img.style.display = 'block';
+  document.getElementById('qr-status').textContent =
+    '📱 Open WhatsApp → Settings → Linked Devices → Link a Device → scan this QR';
+
+  // Show timestamp
+  const age = Math.round((Date.now()/1000) - ts);
+  document.getElementById('qr-timer').textContent =
+    age < 5 ? '🟢 Fresh QR — scan now!' :
+    age < 30 ? '🟡 QR is ' + age + 's old — scan quickly!' :
+    '🔴 QR may be expired — new one generating…';
 }
 
 function showApp() {
-  document.getElementById('pair-screen').style.display = 'none';
+  document.getElementById('qr-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
-  const b = document.getElementById('conn-badge');
-  b.textContent = '🟢 Connected'; b.className = 'connected';
+  const cs = document.getElementById('conn-status');
+  cs.textContent = '🟢 Connected';
+  cs.className = 'connected';
   loadChats();
-  if (chatTimer) clearInterval(chatTimer);
-  chatTimer = setInterval(loadChats, 6000);
+}
+
+// ── App polling ────────────────────────────────────────────────────────────
+function startAppPolling() {
+  pollTimer = setInterval(loadChats, 8000);
   setInterval(async () => {
-    try { const s = await (await fetch(RAW + '/status.json?t=' + Date.now())).json();
-      if (!s.connected) location.reload(); } catch(_) {}
+    try {
+      const r = await fetch(STATUS_URL + '?t=' + Date.now());
+      const s = await r.json();
+      if (!s.connected) location.reload();
+    } catch(_){}
   }, 15000);
 }
 
+// ── API ────────────────────────────────────────────────────────────────────
 async function api(path, opts) {
   if (!tunnelBase) return null;
-  const r = await fetch(tunnelBase + path, { headers: {'Content-Type':'application/json'}, ...opts });
+  const r = await fetch(tunnelBase + path, {
+    headers: {'Content-Type':'application/json'}, ...opts
+  });
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
@@ -199,73 +213,107 @@ async function loadChats() {
   try {
     const data = await api('/api/chats');
     if (!data) return;
-    chats = Object.fromEntries(data.map(c => [c.jid, c]));
+    chats = {};
+    data.forEach(c => { chats[c.jid] = c; });
     renderChatList(data);
-  } catch(e) {}
+  } catch(e) { console.error('loadChats:', e); }
 }
 
 function renderChatList(list) {
-  const q = document.getElementById('search-input').value.toLowerCase();
-  const fl = q ? list.filter(c => (c.name||c.jid).toLowerCase().includes(q)) : list;
-  document.getElementById('chat-list').innerHTML = fl.map(c => {
-    const name = c.name || c.jid.split('@')[0];
-    const time = c.lastTimestamp ? new Date(c.lastTimestamp*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
-    return `<div class="ci ${c.jid===currentJid?'active':''}" onclick="openChat('${esc(c.jid)}')">
-      <div class="av">${esc(name[0].toUpperCase())}</div>
-      <div class="ci-info"><div class="ci-name">${esc(name)}</div><div class="ci-preview">${esc(c.lastMessage||'')}</div></div>
-      <div class="ci-time">${time}</div></div>`;
+  const el = document.getElementById('chat-list');
+  const q  = document.getElementById('search-input').value.toLowerCase();
+  const filtered = q ? list.filter(c => (c.name||c.jid).toLowerCase().includes(q)) : list;
+  el.innerHTML = filtered.map(c => {
+    const name   = c.name || c.jid.split('@')[0];
+    const init   = name[0].toUpperCase();
+    const preview= c.lastMessage || '';
+    const time   = c.lastTimestamp
+      ? new Date(c.lastTimestamp*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
+      : '';
+    const active = c.jid === currentJid ? 'active' : '';
+    return '<div class="ci ' + active + '" onclick="openChat('' + c.jid + '')">' +
+      '<div class="av">' + init + '</div>' +
+      '<div class="ci-info">' +
+        '<div class="ci-name">' + escHtml(name) + '</div>' +
+        '<div class="ci-preview">' + escHtml(preview) + '</div>' +
+      '</div>' +
+      '<div class="ci-time">' + time + '</div>' +
+    '</div>';
   }).join('');
 }
 
-function filterChats() { renderChatList(Object.values(chats)); }
+function filterChats(q) { renderChatList(Object.values(chats)); }
 
 async function openChat(jid) {
   currentJid = jid;
-  const c = chats[jid] || {};
+  const c    = chats[jid] || {};
   const name = c.name || jid.split('@')[0];
   document.getElementById('chat-title').textContent = name;
-  document.getElementById('chat-av').textContent = name[0].toUpperCase();
+  document.getElementById('chat-av').textContent    = name[0].toUpperCase();
   document.getElementById('no-chat-msg').style.display = 'none';
-  document.getElementById('chat-view').style.display = 'flex';
+  const cv = document.getElementById('chat-view');
+  cv.style.display = 'flex';
+  document.getElementById('send-btn').disabled = false;
   renderChatList(Object.values(chats));
-  await loadMsgs(jid);
-  if (msgTimer) clearInterval(msgTimer);
-  msgTimer = setInterval(() => loadMsgs(jid), 3000);
+  await loadMessages(jid);
+  if (msgPollTimer) clearInterval(msgPollTimer);
+  msgPollTimer = setInterval(() => loadMessages(jid), 4000);
 }
 
-async function loadMsgs(jid) {
+async function loadMessages(jid) {
   try {
     const msgs = await api('/api/chats/' + encodeURIComponent(jid) + '/messages');
-    if (!msgs) return;
-    const el = document.getElementById('msg-area');
-    const atBot = el.scrollHeight - el.clientHeight <= el.scrollTop + 60;
-    el.innerHTML = msgs.map(m => {
-      const time = m.timestamp ? new Date(m.timestamp*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
-      const sndr = !m.fromMe && m.pushName ? `<div style="font-size:12px;color:#00a884;margin-bottom:2px">${esc(m.pushName)}</div>` : '';
-      return `<div class="msg ${m.fromMe?'out':'in'}">${sndr}${esc(m.text)}<div class="ts">${time}</div></div>`;
-    }).join('');
-    if (atBot) el.scrollTop = el.scrollHeight;
+    if (msgs) renderMessages(msgs);
   } catch(e) {}
 }
 
-async function sendMessage() {
-  const inp = document.getElementById('msg-input');
-  const text = inp.value.trim();
-  if (!text || !currentJid) return;
-  inp.value = '';
-  document.getElementById('send-btn').disabled = true;
-  try {
-    await api('/api/chats/' + encodeURIComponent(currentJid) + '/send', { method:'POST', body: JSON.stringify({text}) });
-    await loadMsgs(currentJid);
-  } catch(e) { alert('Send failed: ' + e.message); }
-  finally { document.getElementById('send-btn').disabled = false; inp.focus(); }
+function renderMessages(msgs) {
+  const el = document.getElementById('msg-area');
+  const atBottom = el.scrollHeight - el.clientHeight <= el.scrollTop + 50;
+  el.innerHTML = msgs.map(m => {
+    const cls  = m.fromMe ? 'out' : 'in';
+    const time = m.timestamp
+      ? new Date(m.timestamp*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
+      : '';
+    const sender = (!m.fromMe && m.pushName)
+      ? '<div style="font-size:12px;color:#00a884;margin-bottom:2px">' + escHtml(m.pushName) + '</div>'
+      : '';
+    return '<div class="msg ' + cls + '">' + sender + escHtml(m.text) + '<div class="ts">' + time + '</div></div>';
+  }).join('');
+  if (atBottom) el.scrollTop = el.scrollHeight;
 }
 
-function handleKey(e) { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
-function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+async function sendMessage() {
+  const input = document.getElementById('msg-input');
+  const text  = input.value.trim();
+  if (!text || !currentJid) return;
+  input.value = '';
+  document.getElementById('send-btn').disabled = true;
+  try {
+    await api('/api/chats/' + encodeURIComponent(currentJid) + '/send', {
+      method: 'POST', body: JSON.stringify({ text })
+    });
+    await loadMessages(currentJid);
+  } catch(e) { alert('Send failed: ' + e.message); }
+  finally {
+    document.getElementById('send-btn').disabled = false;
+    input.focus();
+  }
+}
 
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function escHtml(s) {
+  return String(s||'')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Boot
 pollStatus();
-setInterval(pollStatus, 4000);
+statusTimer = setInterval(pollStatus, 5000);
 </script>
 </body>
 </html>
