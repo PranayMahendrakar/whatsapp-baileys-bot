@@ -1,9 +1,9 @@
 'use strict';
 /**
  * bot-runner.js - QR Code method
- * Writes status.json to 'bot-data' branch (not main) so GitHub Pages
- * is NOT triggered on every QR refresh. index.html reads from bot-data branch
- * via raw.githubusercontent.com.
+ * Pushes status.json to bot-data branch using git worktree to avoid
+ * branch switching issues. Pages is NOT triggered since bot-data branch
+ * is not configured as Pages source.
  */
 const path = require('path');
 const fs   = require('fs');
@@ -23,61 +23,91 @@ const {
 const { Boom } = require('@hapi/boom');
 const pino    = require('pino');
 
-// ── Push status.json to bot-data branch (no Pages trigger) ──────────────────
-function pushStatusToBotData(statusJson) {
+// ── Write status.json to bot-data branch via worktree ───────────────────────
+const WORKTREE_DIR = path.join(process.cwd(), '.bot-data-wt');
+
+function setupWorktree() {
   try {
     execSync('git config user.email "bot@github.com"', { stdio: 'pipe' });
     execSync('git config user.name "WhatsApp Bot"',    { stdio: 'pipe' });
 
-    // Write file locally first
-    fs.writeFileSync('status.json', statusJson);
-
     // Check if bot-data branch exists remotely
     let branchExists = false;
     try {
-      execSync('git ls-remote --heads origin bot-data | grep bot-data', { stdio: 'pipe' });
-      branchExists = true;
+      const out = execSync('git ls-remote --heads origin bot-data', { stdio: 'pipe' }).toString();
+      branchExists = out.includes('bot-data');
     } catch(_) {}
 
     if (!branchExists) {
-      // Create orphan bot-data branch with just status.json
-      execSync('git checkout --orphan bot-data', { stdio: 'pipe' });
-      execSync('git rm -rf . --quiet', { stdio: 'pipe' });
-      fs.writeFileSync('status.json', statusJson);
-      execSync('git add status.json', { stdio: 'pipe' });
-      execSync('git commit -m "init: bot-data branch"', { stdio: 'pipe' });
+      // Create bot-data as orphan branch via temporary worktree approach
+      console.log('[git] Creating bot-data branch...');
+      execSync('git fetch origin main', { stdio: 'pipe' });
+      execSync('git branch bot-data origin/main', { stdio: 'pipe' });
       execSync('git push origin bot-data', { stdio: 'pipe' });
-      // Switch back to main
-      execSync('git checkout main', { stdio: 'pipe' });
-      console.log('[git] Created bot-data branch');
-    } else {
-      // Fetch and update bot-data branch
-      execSync('git fetch origin bot-data:bot-data 2>/dev/null || true', { stdio: 'pipe' });
-      execSync('git checkout bot-data', { stdio: 'pipe' });
-      fs.writeFileSync('status.json', statusJson);
-      execSync('git add status.json', { stdio: 'pipe' });
+    }
+
+    // Add worktree for bot-data branch
+    if (fs.existsSync(WORKTREE_DIR)) {
+      try { execSync('git worktree remove --force ' + WORKTREE_DIR, { stdio: 'pipe' }); } catch(_) {}
+    }
+    execSync('git fetch origin bot-data:bot-data 2>/dev/null || git fetch origin bot-data', { stdio: 'pipe' });
+    execSync('git worktree add ' + WORKTREE_DIR + ' bot-data', { stdio: 'pipe' });
+    console.log('[git] bot-data worktree ready');
+    return true;
+  } catch(e) {
+    console.error('[git] Worktree setup failed:', e.message.slice(0, 120));
+    return false;
+  }
+}
+
+let worktreeReady = false;
+
+function pushStatusToBotData(statusJson) {
+  // Ensure worktree is set up
+  if (!worktreeReady) {
+    worktreeReady = setupWorktree();
+  }
+
+  if (worktreeReady && fs.existsSync(WORKTREE_DIR)) {
+    try {
+      // Write directly into the worktree directory
+      fs.writeFileSync(path.join(WORKTREE_DIR, 'status.json'), statusJson);
+      execSync('git -C ' + WORKTREE_DIR + ' add status.json', { stdio: 'pipe' });
       try {
-        execSync('git commit -m "chore: status update [skip ci]"', { stdio: 'pipe' });
-        execSync('git push origin bot-data', { stdio: 'pipe' });
+        execSync('git -C ' + WORKTREE_DIR + ' commit -m "chore: status update [skip ci]"', { stdio: 'pipe' });
+        execSync('git -C ' + WORKTREE_DIR + ' push origin bot-data', { stdio: 'pipe' });
         console.log('[git] Pushed status to bot-data');
       } catch(_) {
         console.log('[git] Nothing changed in status.json');
       }
-      // Switch back to main
-      execSync('git checkout main', { stdio: 'pipe' });
+      return;
+    } catch(e) {
+      console.error('[git] Worktree push failed:', e.message.slice(0, 120));
     }
-  } catch (e) {
-    console.error('[git] Push failed:', e.message.slice(0, 120));
-    // Fallback: write to main anyway
+  }
+
+  // Fallback: write to main branch (will trigger Pages but at least it works)
+  try {
+    fs.writeFileSync('status.json', statusJson);
+    execSync('git add status.json', { stdio: 'pipe' });
     try {
-      execSync('git checkout main', { stdio: 'pipe' });
+      execSync('git commit -m "chore: status update [skip ci]"', { stdio: 'pipe' });
+      execSync('git push', { stdio: 'pipe' });
+      console.log('[git] Fallback: pushed to main');
     } catch(_) {}
+  } catch(e) {
+    console.error('[git] Fallback push failed:', e.message.slice(0, 80));
   }
 }
 
 function getTunnelUrl() {
-  try { return JSON.parse(fs.readFileSync('status.json', 'utf8')).url || null; }
-  catch (_) { return null; }
+  // Try reading from worktree first, then local
+  const wtFile = path.join(WORKTREE_DIR, 'status.json');
+  const localFile = 'status.json';
+  for (const f of [wtFile, localFile]) {
+    try { return JSON.parse(fs.readFileSync(f, 'utf8')).url || null; } catch(_) {}
+  }
+  return null;
 }
 
 function writeStatus(data) {
