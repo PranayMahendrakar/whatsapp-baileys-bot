@@ -1,1 +1,7 @@
-{"url": "https://sandra-diversity-emissions-dont.trycloudflare.com", "ts": 1772718630, "connected": false}
+{
+  "url": "https://sandra-diversity-emissions-dont.trycloudflare.com",
+  "ts": 1772718631,
+  "connected": false,
+  "pairingCode": null,
+  "error": "PHONE_NUMBER secret not set"
+}
