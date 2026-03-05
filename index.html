@@ -28,7 +28,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .ci-preview{font-size:13px;color:#8696a0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
 .ci-time{font-size:11px;color:#8696a0;flex-shrink:0}
 #main{flex:1;display:flex;flex-direction:column;overflow:hidden}
-/* QR Screen */
 #qr-screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:40px}
 #qr-screen h2{font-size:22px;color:#e9edef}
 #qr-screen p{color:#8696a0;text-align:center;max-width:420px;line-height:1.6;font-size:14px}
@@ -37,7 +36,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 @keyframes spin{to{transform:rotate(360deg)}}
 #qr-status{font-size:14px;color:#8696a0;text-align:center;max-width:400px}
 #qr-timer{font-size:13px;color:#ffd700;font-weight:600}
-/* Chat area */
 #chat-header{background:#1f2c33;padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #2a3942;flex-shrink:0}
 #chat-header .av{width:40px;height:40px;font-size:16px}
 #chat-title{font-size:16px;font-weight:600}
@@ -63,26 +61,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 </head>
 <body>
 <div id="top-bar">
-  <h1>📱 WhatsApp Bot UI</h1>
-  <span id="conn-status" class="waiting">⏳ Connecting…</span>
-  <button id="refresh-btn" onclick="location.reload()">↻ Refresh</button>
+  <h1>WhatsApp Bot UI</h1>
+  <span id="conn-status" class="waiting">Connecting...</span>
+  <button id="refresh-btn" onclick="location.reload()">Refresh</button>
 </div>
 
-<!-- QR Screen -->
 <div id="qr-screen">
   <h2>Scan QR to Connect WhatsApp</h2>
   <div id="qr-spinner"></div>
   <img id="qr-img" alt="QR Code"/>
-  <p id="qr-status">⏳ Waiting for GitHub Actions bot to generate QR code…<br>Run the workflow from the Actions tab if not started.</p>
+  <p id="qr-status">Waiting for GitHub Actions bot to generate QR code. Run the workflow from the Actions tab if not started.</p>
   <p id="qr-timer"></p>
   <p id="tunnel-info"></p>
 </div>
 
-<!-- Main Chat App -->
 <div id="app" style="display:none">
   <div id="sidebar">
     <div id="sidebar-search">
-      <input id="search-input" type="text" placeholder="🔍 Search chats" oninput="filterChats(this.value)"/>
+      <input id="search-input" type="text" placeholder="Search chats" oninput="filterChats(this.value)"/>
     </div>
     <div id="chat-list"></div>
   </div>
@@ -98,7 +94,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       </div>
       <div id="msg-area"></div>
       <div id="input-bar">
-        <textarea id="msg-input" placeholder="Type a message…" rows="1" onkeydown="handleKey(event)"></textarea>
+        <textarea id="msg-input" placeholder="Type a message..." rows="1" onkeydown="handleKey(event)"></textarea>
         <button id="send-btn" onclick="sendMessage()">Send</button>
       </div>
     </div>
@@ -106,199 +102,177 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 </div>
 
 <script>
-// Config
-const REPO_RAW   = 'https://raw.githubusercontent.com/PranayMahendrakar/whatsapp-baileys-bot/main';
-const STATUS_URL = 'https://raw.githubusercontent.com/PranayMahendrakar/whatsapp-baileys-bot/bot-data/status.json';
+var STATUS_URL = 'https://raw.githubusercontent.com/PranayMahendrakar/whatsapp-baileys-bot/bot-data/status.json';
+var tunnelBase = null;
+var currentJid = null;
+var chats = {};
+var pollTimer = null;
+var msgPollTimer = null;
+var statusTimer = null;
+var lastQrTs = 0;
 
-let tunnelBase     = null;
-let currentJid     = null;
-let chats          = {};
-let pollTimer      = null;
-let msgPollTimer   = null;
-let statusTimer    = null;
-let lastQrTs       = 0;
+function pollStatus() {
+  fetch(STATUS_URL + '?t=' + Date.now())
+    .then(function(r) { return r.json(); })
+    .then(function(s) {
+      var info = document.getElementById('tunnel-info');
+      if (info) info.textContent = s.url ? 'API: ' + s.url : '';
 
-// ── Status polling ─────────────────────────────────────────────────────────
-async function pollStatus() {
-  try {
-    const r = await fetch(STATUS_URL + '?t=' + Date.now());
-    if (!r.ok) throw new Error('status.json not ready');
-    const s = await r.json();
+      if (s.connected && s.url) {
+        tunnelBase = s.url;
+        showApp();
+        clearInterval(statusTimer);
+        startAppPolling();
+        return;
+      }
 
-    document.getElementById('tunnel-info').textContent =
-      s.url ? '🔗 API: ' + s.url : '';
-
-    if (s.connected && s.url) {
-      tunnelBase = s.url;
-      showApp();
-      clearInterval(statusTimer);
-      startAppPolling();
-      return;
-    }
-
-    const cs = document.getElementById('conn-status');
-
-    // Show QR if available
-    if (s.qr) {
-      cs.textContent = '📱 Scan QR code';
-      cs.className = 'waiting';
-      showQRImage(s.qr, s.ts);
-    } else if (s.url) {
-      cs.textContent = '⏳ Bot starting…';
-      cs.className = '';
-      document.getElementById('qr-status').textContent =
-        '⏳ Bot is starting up, QR code will appear shortly…';
-    } else {
-      cs.textContent = '⏳ Bot starting…';
-      cs.className = '';
-    }
-  } catch(e) {
-    document.getElementById('conn-status').textContent = '⏳ Waiting for bot…';
-  }
+      var cs = document.getElementById('conn-status');
+      if (s.qr) {
+        cs.textContent = 'Scan QR Code';
+        cs.className = 'waiting';
+        showQRImage(s.qr, s.ts);
+      } else if (s.url) {
+        cs.textContent = 'Bot starting...';
+        cs.className = '';
+        document.getElementById('qr-status').textContent = 'Bot is starting up, QR code will appear shortly...';
+      } else {
+        cs.textContent = 'Waiting for bot...';
+        cs.className = '';
+      }
+    })
+    .catch(function(e) {
+      document.getElementById('conn-status').textContent = 'Waiting for bot...';
+    });
 }
 
 function showQRImage(dataUrl, ts) {
-  const img  = document.getElementById('qr-img');
-  const spin = document.getElementById('qr-spinner');
-
-  if (ts === lastQrTs && img.style.display === 'block') return; // same QR, skip
+  var img  = document.getElementById('qr-img');
+  var spin = document.getElementById('qr-spinner');
+  if (ts === lastQrTs && img.style.display === 'block') return;
   lastQrTs = ts;
-
   img.src = dataUrl;
   spin.style.display = 'none';
   img.style.display = 'block';
-  document.getElementById('qr-status').textContent =
-    '📱 Open WhatsApp → Settings → Linked Devices → Link a Device → scan this QR';
-
-  // Show timestamp
-  const age = Math.round((Date.now()/1000) - ts);
-  document.getElementById('qr-timer').textContent =
-    age < 5 ? '🟢 Fresh QR — scan now!' :
-    age < 30 ? '🟡 QR is ' + age + 's old — scan quickly!' :
-    '🔴 QR may be expired — new one generating…';
+  document.getElementById('qr-status').textContent = 'Open WhatsApp > Settings > Linked Devices > Link a Device > scan this QR';
+  var age = Math.round((Date.now() / 1000) - ts);
+  var timerEl = document.getElementById('qr-timer');
+  if (age < 5) {
+    timerEl.textContent = 'Fresh QR - scan now!';
+  } else if (age < 30) {
+    timerEl.textContent = 'QR is ' + age + 's old - scan quickly!';
+  } else {
+    timerEl.textContent = 'QR may be expired - new one generating...';
+  }
 }
 
 function showApp() {
   document.getElementById('qr-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
-  const cs = document.getElementById('conn-status');
-  cs.textContent = '🟢 Connected';
+  var cs = document.getElementById('conn-status');
+  cs.textContent = 'Connected';
   cs.className = 'connected';
   loadChats();
 }
 
-// ── App polling ────────────────────────────────────────────────────────────
 function startAppPolling() {
   pollTimer = setInterval(loadChats, 8000);
-  setInterval(async () => {
-    try {
-      const r = await fetch(STATUS_URL + '?t=' + Date.now());
-      const s = await r.json();
-      if (!s.connected) location.reload();
-    } catch(_){}
+  setInterval(function() {
+    fetch(STATUS_URL + '?t=' + Date.now())
+      .then(function(r) { return r.json(); })
+      .then(function(s) { if (!s.connected) location.reload(); })
+      .catch(function(){});
   }, 15000);
 }
 
-// ── API ────────────────────────────────────────────────────────────────────
-async function api(path, opts) {
-  if (!tunnelBase) return null;
-  const r = await fetch(tunnelBase + path, {
-    headers: {'Content-Type':'application/json'}, ...opts
-  });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+function api(path, opts) {
+  if (!tunnelBase) return Promise.resolve(null);
+  return fetch(tunnelBase + path, Object.assign({ headers: {'Content-Type':'application/json'} }, opts || {}))
+    .then(function(r) {
+      if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
+      return r.json();
+    });
 }
 
-async function loadChats() {
-  try {
-    const data = await api('/api/chats');
-    if (!data) return;
-    chats = {};
-    data.forEach(c => { chats[c.jid] = c; });
-    renderChatList(data);
-  } catch(e) { console.error('loadChats:', e); }
+function loadChats() {
+  api('/api/chats')
+    .then(function(data) {
+      if (!data) return;
+      chats = {};
+      data.forEach(function(c) { chats[c.jid] = c; });
+      renderChatList(data);
+    })
+    .catch(function(e) { console.error('loadChats:', e); });
 }
 
 function renderChatList(list) {
-  const el = document.getElementById('chat-list');
-  const q  = document.getElementById('search-input').value.toLowerCase();
-  const filtered = q ? list.filter(c => (c.name||c.jid).toLowerCase().includes(q)) : list;
-  el.innerHTML = filtered.map(c => {
-    const name   = c.name || c.jid.split('@')[0];
-    const init   = name[0].toUpperCase();
-    const preview= c.lastMessage || '';
-    const time   = c.lastTimestamp
-      ? new Date(c.lastTimestamp*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
-      : '';
-    const active = c.jid === currentJid ? 'active' : '';
-    return '<div class="ci ' + active + '" onclick="openChat('' + c.jid + '')">' +
+  var el = document.getElementById('chat-list');
+  var q  = document.getElementById('search-input').value.toLowerCase();
+  var filtered = q ? list.filter(function(c) { return (c.name || c.jid).toLowerCase().indexOf(q) >= 0; }) : list;
+  el.innerHTML = filtered.map(function(c) {
+    var name   = c.name || c.jid.split('@')[0];
+    var init   = name[0].toUpperCase();
+    var preview= c.lastMessage || '';
+    var time   = c.lastTimestamp ? new Date(c.lastTimestamp * 1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+    var active = c.jid === currentJid ? 'active' : '';
+    return '<div class="ci ' + active + '" onclick="openChat('' + c.jid.replace(/'/g, "\'") + '')">' +
       '<div class="av">' + init + '</div>' +
-      '<div class="ci-info">' +
-        '<div class="ci-name">' + escHtml(name) + '</div>' +
-        '<div class="ci-preview">' + escHtml(preview) + '</div>' +
-      '</div>' +
+      '<div class="ci-info"><div class="ci-name">' + escHtml(name) + '</div><div class="ci-preview">' + escHtml(preview) + '</div></div>' +
       '<div class="ci-time">' + time + '</div>' +
-    '</div>';
+      '</div>';
   }).join('');
 }
 
 function filterChats(q) { renderChatList(Object.values(chats)); }
 
-async function openChat(jid) {
+function openChat(jid) {
   currentJid = jid;
-  const c    = chats[jid] || {};
-  const name = c.name || jid.split('@')[0];
+  var c    = chats[jid] || {};
+  var name = c.name || jid.split('@')[0];
   document.getElementById('chat-title').textContent = name;
   document.getElementById('chat-av').textContent    = name[0].toUpperCase();
   document.getElementById('no-chat-msg').style.display = 'none';
-  const cv = document.getElementById('chat-view');
+  var cv = document.getElementById('chat-view');
   cv.style.display = 'flex';
   document.getElementById('send-btn').disabled = false;
   renderChatList(Object.values(chats));
-  await loadMessages(jid);
+  loadMessages(jid);
   if (msgPollTimer) clearInterval(msgPollTimer);
-  msgPollTimer = setInterval(() => loadMessages(jid), 4000);
+  msgPollTimer = setInterval(function() { loadMessages(jid); }, 4000);
 }
 
-async function loadMessages(jid) {
-  try {
-    const msgs = await api('/api/chats/' + encodeURIComponent(jid) + '/messages');
-    if (msgs) renderMessages(msgs);
-  } catch(e) {}
+function loadMessages(jid) {
+  api('/api/chats/' + encodeURIComponent(jid) + '/messages')
+    .then(function(msgs) { if (msgs) renderMessages(msgs); })
+    .catch(function(){});
 }
 
 function renderMessages(msgs) {
-  const el = document.getElementById('msg-area');
-  const atBottom = el.scrollHeight - el.clientHeight <= el.scrollTop + 50;
-  el.innerHTML = msgs.map(m => {
-    const cls  = m.fromMe ? 'out' : 'in';
-    const time = m.timestamp
-      ? new Date(m.timestamp*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
-      : '';
-    const sender = (!m.fromMe && m.pushName)
-      ? '<div style="font-size:12px;color:#00a884;margin-bottom:2px">' + escHtml(m.pushName) + '</div>'
-      : '';
+  var el = document.getElementById('msg-area');
+  var atBottom = el.scrollHeight - el.clientHeight <= el.scrollTop + 50;
+  el.innerHTML = msgs.map(function(m) {
+    var cls  = m.fromMe ? 'out' : 'in';
+    var time = m.timestamp ? new Date(m.timestamp * 1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+    var sender = (!m.fromMe && m.pushName) ? '<div style="font-size:12px;color:#00a884;margin-bottom:2px">' + escHtml(m.pushName) + '</div>' : '';
     return '<div class="msg ' + cls + '">' + sender + escHtml(m.text) + '<div class="ts">' + time + '</div></div>';
   }).join('');
   if (atBottom) el.scrollTop = el.scrollHeight;
 }
 
-async function sendMessage() {
-  const input = document.getElementById('msg-input');
-  const text  = input.value.trim();
+function sendMessage() {
+  var input = document.getElementById('msg-input');
+  var text  = input.value.trim();
   if (!text || !currentJid) return;
   input.value = '';
   document.getElementById('send-btn').disabled = true;
-  try {
-    await api('/api/chats/' + encodeURIComponent(currentJid) + '/send', {
-      method: 'POST', body: JSON.stringify({ text })
-    });
-    await loadMessages(currentJid);
-  } catch(e) { alert('Send failed: ' + e.message); }
-  finally {
+  api('/api/chats/' + encodeURIComponent(currentJid) + '/send', {
+    method: 'POST', body: JSON.stringify({ text: text })
+  })
+  .then(function() { return loadMessages(currentJid); })
+  .catch(function(e) { alert('Send failed: ' + e.message); })
+  .finally(function() {
     document.getElementById('send-btn').disabled = false;
-    input.focus();
-  }
+    document.getElementById('msg-input').focus();
+  });
 }
 
 function handleKey(e) {
@@ -306,12 +280,9 @@ function handleKey(e) {
 }
 
 function escHtml(s) {
-  return String(s||'')
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// Boot
 pollStatus();
 statusTimer = setInterval(pollStatus, 5000);
 </script>
