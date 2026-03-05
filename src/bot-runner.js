@@ -5,8 +5,8 @@
  * Entry point for GitHub Actions.
  * - Starts the Express web server
  * - Starts the Baileys WhatsApp bot
- * - Generates QR code as PNG and pushes it to the repo (→ GitHub Pages)
- * - Updates status.json in the repo when connection state changes
+ * - Embeds QR as base64 data URL directly in status.json (fast, no separate file)
+ * - Updates status.json when connection state changes
  */
 
 const path = require('path');
@@ -41,32 +41,36 @@ function gitPush(files, message) {
     execSync('git push', { stdio: 'pipe' });
     console.log(`[git] Pushed: ${message}`);
   } catch (e) {
-    console.error('[git] Push failed (may be no changes):', e.message);
+    // No changes or push failed — ignore
+    console.log('[git] Nothing to push or push failed:', e.message.substring(0, 80));
   }
 }
 
-// ── Update status.json ────────────────────────────────────────────────────────
-function writeStatus(connected, tunnelUrl) {
-  // Read existing status.json for tunnel URL if not provided
-  let url = tunnelUrl;
-  if (!url) {
-    try {
-      const existing = JSON.parse(fs.readFileSync('status.json', 'utf8'));
-      url = existing.url || null;
-    } catch (_) {}
-  }
-  const payload = JSON.stringify({ url, ts: Math.floor(Date.now() / 1000), connected }, null, 2);
-  fs.writeFileSync('status.json', payload);
-  console.log('[status] Updated status.json:', payload);
+// ── Read current tunnel URL from status.json ──────────────────────────────────
+function getTunnelUrl() {
+  try {
+    const s = JSON.parse(fs.readFileSync('status.json', 'utf8'));
+    return s.url || null;
+  } catch (_) { return null; }
+}
+
+// ── Write status.json (with optional qrDataUrl embedded) ─────────────────────
+function writeStatus({ connected, qrDataUrl }) {
+  const url = getTunnelUrl();
+  const payload = {
+    url,
+    ts: Math.floor(Date.now() / 1000),
+    connected,
+    qr: qrDataUrl || null,
+  };
+  fs.writeFileSync('status.json', JSON.stringify(payload, null, 2));
+  console.log(`[status] connected=${connected} qr=${qrDataUrl ? 'YES (' + Math.round(qrDataUrl.length/1024) + 'KB)' : 'none'}`);
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
-  // 1. Start web server
   await startServer();
   console.log('[runner] Web server started');
-
-  // 2. Start bot
   await startBot();
 }
 
@@ -76,7 +80,6 @@ async function startBot() {
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
-
   console.log('[runner] Starting Baileys v' + version.join('.'));
 
   const logger = pino({ level: process.env.LOG_LEVEL || 'silent' });
@@ -93,41 +96,33 @@ async function startBot() {
     generateHighQualityLinkPreview: false,
   });
 
-  // Share socket with server module so it can send messages
   setSocket(sock);
 
-  // ── QR Code ────────────────────────────────────────────────────────────────
+  // ── Connection events ──────────────────────────────────────────────────────
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      console.log('[runner] QR code received — generating PNG and pushing to repo…');
+      console.log('[runner] New QR received — embedding in status.json…');
       try {
-        // Save QR as PNG at repo root (served by GitHub Pages)
-        await QRCode.toFile('qr.png', qr, {
-          width: 400,
-          margin: 2,
+        // Generate QR as base64 data URL (larger margin + scale so phone can scan)
+        const qrDataUrl = await QRCode.toDataURL(qr, {
+          width: 512,
+          margin: 4,
+          errorCorrectionLevel: 'M',
           color: { dark: '#000000', light: '#ffffff' },
         });
-        console.log('[runner] qr.png saved');
-
-        // Update status.json to show waiting-for-scan state
-        writeStatus(false);
-
-        // Push both files to repo
-        gitPush(['qr.png', 'status.json'], 'chore: update QR code for GitHub Pages scan');
+        writeStatus({ connected: false, qrDataUrl });
+        gitPush(['status.json'], 'chore: refresh QR code');
       } catch (err) {
-        console.error('[runner] Failed to push QR:', err.message);
+        console.error('[runner] QR generation failed:', err.message);
       }
     }
 
     if (connection === 'close') {
       const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
-      console.log('[runner] Connection closed. Reason:', reason);
-
-      // Clean up QR
-      try { fs.unlinkSync('qr.png'); } catch (_) {}
-      writeStatus(false);
+      console.log('[runner] Connection closed, reason:', reason);
+      writeStatus({ connected: false, qrDataUrl: null });
       gitPush(['status.json'], 'chore: connection closed');
 
       if (reason !== DisconnectReason.loggedOut) {
@@ -141,14 +136,12 @@ async function startBot() {
     }
 
     if (connection === 'open') {
-      console.log('[runner] ✅ Connected to WhatsApp!');
-      try { fs.unlinkSync('qr.png'); } catch (_) {}
-      writeStatus(true);
+      console.log('[runner] ✅ WhatsApp connected!');
+      writeStatus({ connected: true, qrDataUrl: null });
       gitPush(['status.json'], 'chore: bot connected');
     }
   });
 
-  // ── Save creds ─────────────────────────────────────────────────────────────
   sock.ev.on('creds.update', saveCreds);
 
   // ── Messages ───────────────────────────────────────────────────────────────
@@ -162,7 +155,6 @@ async function startBot() {
         msg.message?.imageMessage?.caption ||
         msg.message?.videoMessage?.caption ||
         '[Media/Other]';
-
       const fromMe = msg.key.fromMe;
       storeMessage(jid, {
         id: msg.key.id,
@@ -171,16 +163,14 @@ async function startBot() {
         timestamp: msg.messageTimestamp,
         pushName: msg.pushName || '',
       });
-
-      // Auto-reply to non-self messages (optional echo — disable if not wanted)
       if (!fromMe && type === 'notify') {
-        console.log(`[msg] From ${jid}: ${text}`);
+        console.log(`[msg] ${jid}: ${text}`);
       }
     }
   });
 }
 
 main().catch((err) => {
-  console.error('[runner] Fatal error:', err);
+  console.error('[runner] Fatal:', err);
   process.exit(1);
 });
