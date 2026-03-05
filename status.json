@@ -1,7 +1,7 @@
 {
   "url": "https://governmental-officer-nashville-tom.trycloudflare.com",
-  "ts": 1772719752,
+  "ts": 1772719757,
   "connected": false,
   "pairingCode": null,
-  "error": null
+  "error": "Connection Closed"
 }
