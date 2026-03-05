@@ -38,7 +38,7 @@ jobs:
             echo "${{ secrets.WHATSAPP_AUTH_DATA }}" | base64 -d | tar -xzf - -C auth_info/ 2>/dev/null || true
             echo "Session restored from secret"
           else
-            echo "No session found - QR code will be shown on GitHub Pages"
+            echo "No session - pairing code will be shown on GitHub Pages"
           fi
 
       # 5. Install cloudflared
@@ -61,7 +61,7 @@ jobs:
             fi
             sleep 2
           done
-          echo "{\"url\": \"$URL\", \"ts\": $(date +%s), \"connected\": false}" > status.json
+          echo "{\"url\": \"$URL\", \"ts\": $(date +%s), \"connected\": false, \"pairingCode\": null}" > status.json
           git config user.email "bot@github.com"
           git config user.name "WhatsApp Bot"
           git add status.json
@@ -69,11 +69,12 @@ jobs:
           git push || true
           echo "Status.json pushed with URL: $URL"
 
-      # 7. Run the bot
+      # 7. Run the bot (pairing code mode)
       - name: Run WhatsApp Bot + Web Server
         run: node src/bot-runner.js
         env:
-          LOG_LEVEL: info
+          LOG_LEVEL: silent
+          PHONE_NUMBER: ${{ secrets.PHONE_NUMBER }}
         timeout-minutes: 340
 
       # 8. Save session
@@ -90,7 +91,7 @@ jobs:
       - name: Clear status on exit
         if: always()
         run: |
-          echo "{\"url\": null, \"ts\": $(date +%s), \"connected\": false}" > status.json
+          echo "{\"url\": null, \"ts\": $(date +%s), \"connected\": false, \"pairingCode\": null}" > status.json
           git add status.json
           git commit -m "chore: clear status [skip ci]" || true
           git push || true
