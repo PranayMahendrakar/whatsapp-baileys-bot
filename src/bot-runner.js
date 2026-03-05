@@ -1,7 +1,9 @@
 'use strict';
 /**
  * bot-runner.js - QR Code method
- * Embeds QR as base64 in status.json so GitHub Pages can display it.
+ * Writes status.json to 'bot-data' branch (not main) so GitHub Pages
+ * is NOT triggered on every QR refresh. index.html reads from bot-data branch
+ * via raw.githubusercontent.com.
  */
 const path = require('path');
 const fs   = require('fs');
@@ -21,16 +23,55 @@ const {
 const { Boom } = require('@hapi/boom');
 const pino    = require('pino');
 
-function gitPush(files, message) {
+// ── Push status.json to bot-data branch (no Pages trigger) ──────────────────
+function pushStatusToBotData(statusJson) {
   try {
     execSync('git config user.email "bot@github.com"', { stdio: 'pipe' });
     execSync('git config user.name "WhatsApp Bot"',    { stdio: 'pipe' });
-    for (const f of files) execSync('git add ' + f, { stdio: 'pipe' });
-    execSync('git commit -m "' + message + ' [skip ci]"', { stdio: 'pipe' });
-    execSync('git push', { stdio: 'pipe' });
-    console.log('[git] Pushed:', message);
+
+    // Write file locally first
+    fs.writeFileSync('status.json', statusJson);
+
+    // Check if bot-data branch exists remotely
+    let branchExists = false;
+    try {
+      execSync('git ls-remote --heads origin bot-data | grep bot-data', { stdio: 'pipe' });
+      branchExists = true;
+    } catch(_) {}
+
+    if (!branchExists) {
+      // Create orphan bot-data branch with just status.json
+      execSync('git checkout --orphan bot-data', { stdio: 'pipe' });
+      execSync('git rm -rf . --quiet', { stdio: 'pipe' });
+      fs.writeFileSync('status.json', statusJson);
+      execSync('git add status.json', { stdio: 'pipe' });
+      execSync('git commit -m "init: bot-data branch"', { stdio: 'pipe' });
+      execSync('git push origin bot-data', { stdio: 'pipe' });
+      // Switch back to main
+      execSync('git checkout main', { stdio: 'pipe' });
+      console.log('[git] Created bot-data branch');
+    } else {
+      // Fetch and update bot-data branch
+      execSync('git fetch origin bot-data:bot-data 2>/dev/null || true', { stdio: 'pipe' });
+      execSync('git checkout bot-data', { stdio: 'pipe' });
+      fs.writeFileSync('status.json', statusJson);
+      execSync('git add status.json', { stdio: 'pipe' });
+      try {
+        execSync('git commit -m "chore: status update [skip ci]"', { stdio: 'pipe' });
+        execSync('git push origin bot-data', { stdio: 'pipe' });
+        console.log('[git] Pushed status to bot-data');
+      } catch(_) {
+        console.log('[git] Nothing changed in status.json');
+      }
+      // Switch back to main
+      execSync('git checkout main', { stdio: 'pipe' });
+    }
   } catch (e) {
-    console.log('[git] Nothing to push:', e.message.slice(0, 80));
+    console.error('[git] Push failed:', e.message.slice(0, 120));
+    // Fallback: write to main anyway
+    try {
+      execSync('git checkout main', { stdio: 'pipe' });
+    } catch(_) {}
   }
 }
 
@@ -42,11 +83,13 @@ function getTunnelUrl() {
 function writeStatus(data) {
   const url = getTunnelUrl();
   const payload = { url, ts: Math.floor(Date.now() / 1000), ...data };
-  fs.writeFileSync('status.json', JSON.stringify(payload, null, 2));
+  const jsonStr = JSON.stringify(payload, null, 2);
   const qrLen = data.qr ? Math.round(data.qr.length / 1024) + 'KB' : 'none';
   console.log('[status] connected=' + data.connected + ' qr=' + qrLen);
+  pushStatusToBotData(jsonStr);
 }
 
+// ── Main ─────────────────────────────────────────────────────────────────────
 async function main() {
   await startServer();
   console.log('[runner] Web server started on port 3000');
@@ -89,7 +132,6 @@ async function startBot() {
           color: { dark: '#000000', light: '#ffffff' },
         });
         writeStatus({ connected: false, qr: qrDataUrl, error: null });
-        gitPush(['status.json'], 'chore: refresh QR code');
       } catch (err) {
         console.error('[runner] QR generation failed:', err.message);
       }
@@ -99,7 +141,6 @@ async function startBot() {
       const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
       console.log('[runner] Connection closed, reason:', reason);
       writeStatus({ connected: false, qr: null, error: null });
-      gitPush(['status.json'], 'chore: connection closed');
 
       if (reason !== DisconnectReason.loggedOut) {
         console.log('[runner] Reconnecting in 5s...');
@@ -114,7 +155,6 @@ async function startBot() {
     if (connection === 'open') {
       console.log('[runner] WhatsApp connected!');
       writeStatus({ connected: true, qr: null, error: null });
-      gitPush(['status.json'], 'chore: bot connected');
     }
   });
 
