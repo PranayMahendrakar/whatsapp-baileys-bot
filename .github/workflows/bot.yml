@@ -1,0 +1,66 @@
+name: WhatsApp Baileys Bot
+
+on:
+  # Run on push to main branch
+  push:
+    branches: [ main ]
+
+  # Allow manual trigger from Actions tab
+  workflow_dispatch:
+
+  # Keep bot running on schedule (every 6 hours as a keep-alive)
+  schedule:
+    - cron: '0 */6 * * *'
+
+jobs:
+  run-bot:
+    name: Run WhatsApp Bot
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout code ──────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Setup Node.js ──────────────────────────────────────────────────
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ── 3. Install dependencies ───────────────────────────────────────────
+      - name: Install dependencies
+        run: npm ci
+
+      # ── 4. Restore WhatsApp auth session ─────────────────────────────────
+      #    Store the auth_info folder contents as a base64 secret named
+      #    WHATSAPP_AUTH_DATA in your repo Settings → Secrets → Actions
+      - name: Restore WhatsApp session
+        run: |
+          mkdir -p auth_info
+          if [ -n "${{ secrets.WHATSAPP_AUTH_DATA }}" ]; then
+            echo "${{ secrets.WHATSAPP_AUTH_DATA }}" | base64 -d > auth_info.tar.gz
+            tar -xzf auth_info.tar.gz -C auth_info/
+            echo "✅ Session restored from secret"
+          else
+            echo "⚠️  No session secret found. Bot will show QR code on first run."
+            echo "   After scanning QR locally, upload auth_info as WHATSAPP_AUTH_DATA secret."
+          fi
+
+      # ── 5. Run the bot ────────────────────────────────────────────────────
+      - name: Start WhatsApp Bot
+        run: npm start
+        env:
+          LOG_LEVEL: info
+        timeout-minutes: 350   # GitHub Actions max = 6h; adjust as needed
+
+      # ── 6. Save updated auth session back to artifact ─────────────────────
+      - name: Save WhatsApp session artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: whatsapp-auth-session
+          path: auth_info/
+          retention-days: 7
+          if-no-files-found: warn
