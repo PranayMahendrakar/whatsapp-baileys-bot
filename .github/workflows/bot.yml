@@ -1,72 +1,96 @@
-name: WhatsApp Baileys Bot + Web UI
+name: WhatsApp Bot + Web UI
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
-  schedule:
-    - cron: '0 */6 * * *'
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
 
 jobs:
   run-bot:
-    name: Run WhatsApp Bot + Web UI
     runs-on: ubuntu-latest
+    timeout-minutes: 350
 
     steps:
+      # 1. Checkout
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
+      # 2. Node.js
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
+      # 3. Install deps
       - name: Install dependencies
         run: npm install
 
+      # 4. Restore WhatsApp session
       - name: Restore WhatsApp session
         run: |
           mkdir -p auth_info
           if [ -n "${{ secrets.WHATSAPP_AUTH_DATA }}" ]; then
-            echo "${{ secrets.WHATSAPP_AUTH_DATA }}" | base64 -d > auth_info.tar.gz
-            tar -xzf auth_info.tar.gz -C auth_info/ || true
-            echo "Session restored"
+            echo "${{ secrets.WHATSAPP_AUTH_DATA }}" | base64 -d | tar -xzf - -C auth_info/ 2>/dev/null || true
+            echo "Session restored from secret"
           else
-            echo "No session - bot will show QR"
+            echo "No session found - QR code will be shown on GitHub Pages"
           fi
 
-      - name: Install ngrok
+      # 5. Install cloudflared
+      - name: Install cloudflared
         run: |
-          curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
-          sudo apt-get update -qq && sudo apt-get install -y ngrok
-          if [ -n "${{ secrets.NGROK_AUTH_TOKEN }}" ]; then
-            ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
-          fi
+          curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+          chmod +x /usr/local/bin/cloudflared
 
-      - name: Start ngrok tunnel
+      # 6. Start tunnel + write status.json
+      - name: Start cloudflared tunnel
         run: |
-          ngrok http 3000 --log=stdout > /tmp/ngrok.log 2>&1 &
-          sleep 5
-          URL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['tunnels'][0]['public_url'])" 2>/dev/null || echo "ngrok not available")
-          echo "======================================"
-          echo "WEB UI URL: $URL"
-          echo "Open this in your browser to see chats"
-          echo "======================================"
-        continue-on-error: true
+          cloudflared tunnel --url http://localhost:3000 --no-autoupdate > /tmp/cf.log 2>&1 &
+          echo "Waiting for tunnel URL..."
+          URL=""
+          for i in $(seq 1 15); do
+            URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cf.log 2>/dev/null | head -1)
+            if [ -n "$URL" ]; then
+              echo "Tunnel URL: $URL"
+              break
+            fi
+            sleep 2
+          done
+          echo "{\"url\": \"$URL\", \"ts\": $(date +%s), \"connected\": false}" > status.json
+          git config user.email "bot@github.com"
+          git config user.name "WhatsApp Bot"
+          git add status.json
+          git commit -m "chore: update tunnel URL [skip ci]" || true
+          git push || true
+          echo "Status.json pushed with URL: $URL"
 
-      - name: Start WhatsApp Bot + Web UI
-        run: npm start
+      # 7. Run the bot
+      - name: Run WhatsApp Bot + Web Server
+        run: node src/bot-runner.js
         env:
           LOG_LEVEL: info
-          PORT: 3000
-        timeout-minutes: 350
+        timeout-minutes: 340
 
-      - name: Save session artifact
+      # 8. Save session
+      - name: Save WhatsApp session artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: whatsapp-auth-session
+          name: whatsapp-auth-${{ github.run_id }}
           path: auth_info/
           retention-days: 7
           if-no-files-found: warn
+
+      # 9. Clean up status.json
+      - name: Clear status on exit
+        if: always()
+        run: |
+          echo "{\"url\": null, \"ts\": $(date +%s), \"connected\": false}" > status.json
+          git add status.json
+          git commit -m "chore: clear status [skip ci]" || true
+          git push || true
