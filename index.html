@@ -9,9 +9,9 @@
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0b141a;color:#e9edef;height:100vh;display:flex;flex-direction:column;overflow:hidden}
     #top-bar{background:#1f2c33;padding:12px 20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #2a3942;flex-shrink:0}
     #top-bar h1{font-size:17px;font-weight:600;flex:1}
-    #conn-status{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;background:#2a3942;color:#8696a0}
-    #conn-status.connected{background:#00a884;color:#111}
-    #conn-status.waiting{background:#ffd700;color:#111}
+    #conn-badge{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;background:#2a3942;color:#8696a0}
+    #conn-badge.connected{background:#00a884;color:#111}
+    #conn-badge.waiting{background:#ffd700;color:#111}
     #app{display:flex;flex:1;overflow:hidden}
     #sidebar{width:340px;min-width:280px;background:#111b21;display:flex;flex-direction:column;border-right:1px solid #2a3942}
     #sidebar-search{padding:8px 12px;background:#111b21;border-bottom:1px solid #2a3942}
@@ -28,97 +28,121 @@
     .ci-preview{font-size:13px;color:#8696a0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
     .ci-time{font-size:11px;color:#8696a0;flex-shrink:0}
     #main{flex:1;display:flex;flex-direction:column;overflow:hidden}
-    #qr-screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:40px}
-    #qr-screen h2{font-size:22px;color:#e9edef;font-weight:600}
-    #qr-screen p{color:#8696a0;text-align:center;max-width:440px;line-height:1.6;font-size:14px}
-    #qr-img{width:280px;height:280px;border:4px solid #00a884;border-radius:12px;background:#fff;display:none;image-rendering:pixelated}
-    #qr-spinner{width:60px;height:60px;border:4px solid #2a3942;border-top-color:#00a884;border-radius:50%;animation:spin 1s linear infinite}
+    /* ── Pairing screen ── */
+    #pair-screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:40px;text-align:center}
+    #pair-screen h2{font-size:22px;font-weight:700}
+    .steps{background:#1f2c33;border-radius:12px;padding:20px 28px;text-align:left;max-width:420px;width:100%}
+    .steps ol{padding-left:20px;line-height:2.2;font-size:15px;color:#e9edef}
+    .steps ol li b{color:#00a884}
+    #code-box{background:#1f2c33;border:2px solid #00a884;border-radius:16px;padding:24px 40px;min-width:300px}
+    #code-box .label{font-size:12px;color:#8696a0;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+    #code-val{font-size:42px;font-weight:900;letter-spacing:8px;color:#00a884;font-family:monospace}
+    #code-spinner{width:40px;height:40px;border:3px solid #2a3942;border-top-color:#00a884;border-radius:50%;animation:spin 1s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
-    #qr-status{font-size:14px;color:#8696a0;text-align:center;max-width:440px;line-height:1.6}
-    #countdown{font-size:13px;color:#ffd700;font-weight:600;margin-top:-8px}
+    #code-status{font-size:14px;color:#8696a0;max-width:420px;line-height:1.6}
+    #error-box{background:#2a1f1f;border:1px solid #8b2222;border-radius:10px;padding:14px 20px;color:#ff6b6b;font-size:13px;max-width:420px;display:none}
+    /* ── Chat screen ── */
     #chat-header{background:#1f2c33;padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #2a3942;flex-shrink:0}
     #chat-header .av{width:40px;height:40px;font-size:16px}
     #chat-title{font-size:16px;font-weight:600}
     #msg-area{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:4px;background:#0b141a}
     #msg-area::-webkit-scrollbar{width:5px}
     #msg-area::-webkit-scrollbar-thumb{background:#2a3942}
-    .msg{max-width:65%;padding:8px 12px;border-radius:8px;font-size:14.5px;line-height:1.45;position:relative;word-break:break-word}
+    .msg{max-width:65%;padding:8px 12px;border-radius:8px;font-size:14.5px;line-height:1.45;word-break:break-word}
     .msg.in{background:#1f2c33;align-self:flex-start;border-top-left-radius:2px}
     .msg.out{background:#005c4b;align-self:flex-end;border-top-right-radius:2px}
     .msg .ts{font-size:11px;color:#8696a0;margin-top:4px;text-align:right}
     #input-bar{background:#1f2c33;padding:10px 16px;display:flex;gap:10px;border-top:1px solid #2a3942;flex-shrink:0}
     #msg-input{flex:1;background:#2a3942;border:none;border-radius:8px;padding:10px 14px;color:#e9edef;font-size:15px;outline:none;resize:none;max-height:120px;overflow-y:auto}
     #msg-input::placeholder{color:#8696a0}
-    #send-btn{background:#00a884;border:none;border-radius:8px;padding:10px 20px;color:#fff;font-size:15px;cursor:pointer;font-weight:600;transition:background .15s}
+    #send-btn{background:#00a884;border:none;border-radius:8px;padding:10px 20px;color:#fff;font-size:15px;cursor:pointer;font-weight:600}
     #send-btn:hover{background:#017561}
     #send-btn:disabled{background:#2a3942;color:#8696a0;cursor:not-allowed}
     .empty-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#8696a0;font-size:15px}
     #refresh-btn{background:#2a3942;border:none;border-radius:8px;padding:8px 16px;color:#e9edef;cursor:pointer;font-size:13px}
-    #refresh-btn:hover{background:#374a55}
   </style>
 </head>
 <body>
-  <div id="top-bar">
-    <h1>📱 WhatsApp Bot UI</h1>
-    <span id="conn-status">⏳ Loading…</span>
-    <button id="refresh-btn" onclick="location.reload()">↻ Refresh</button>
+<div id="top-bar">
+  <h1>📱 WhatsApp Bot UI</h1>
+  <span id="conn-badge">⏳ Loading…</span>
+  <button id="refresh-btn" onclick="location.reload()">↻ Refresh</button>
+</div>
+
+<!-- Pairing code screen -->
+<div id="pair-screen">
+  <h2>Link WhatsApp with Pairing Code</h2>
+
+  <div id="code-box">
+    <div class="label">Your pairing code</div>
+    <div id="code-spinner"></div>
+    <div id="code-val" style="display:none">----</div>
   </div>
 
-  <!-- QR Screen -->
-  <div id="qr-screen">
-    <h2>Scan QR to Connect WhatsApp</h2>
-    <div id="qr-spinner"></div>
-    <img id="qr-img" alt="QR Code"/>
-    <p id="qr-status">⏳ Waiting for bot to start on GitHub Actions…<br>Start the workflow from the Actions tab if needed.</p>
-    <div id="countdown"></div>
-  </div>
+  <div id="code-status">⏳ Waiting for bot to start on GitHub Actions…</div>
+  <div id="error-box"></div>
 
-  <!-- Main Chat App (hidden until connected) -->
-  <div id="app" style="display:none">
-    <div id="sidebar">
-      <div id="sidebar-search">
-        <input id="search-input" type="text" placeholder="🔍 Search chats" oninput="filterChats(this.value)"/>
-      </div>
-      <div id="chat-list"></div>
+  <div class="steps">
+    <ol>
+      <li>Wait for the <b>8-digit code</b> to appear above</li>
+      <li>Open <b>WhatsApp</b> on your phone</li>
+      <li>Go to <b>Settings → Linked Devices → Link a Device</b></li>
+      <li>Tap <b>"Link with phone number instead"</b></li>
+      <li>Enter the code shown above</li>
+    </ol>
+  </div>
+</div>
+
+<!-- Chat app (hidden until connected) -->
+<div id="app" style="display:none">
+  <div id="sidebar">
+    <div id="sidebar-search">
+      <input id="search-input" type="text" placeholder="🔍 Search chats" oninput="filterChats(this.value)"/>
     </div>
-    <div id="main">
-      <div class="empty-main" id="no-chat-msg">
-        <svg width="80" height="80" viewBox="0 0 24 24" fill="#e9edef" style="opacity:.15"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
-        <span>Select a chat to start messaging</span>
+    <div id="chat-list"></div>
+  </div>
+  <div id="main">
+    <div class="empty-main" id="no-chat-msg">
+      <svg width="80" height="80" viewBox="0 0 24 24" fill="#e9edef" style="opacity:.12"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+      <span>Select a chat to start messaging</span>
+    </div>
+    <div id="chat-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+      <div id="chat-header">
+        <div class="av" id="chat-av">?</div>
+        <span id="chat-title">Chat</span>
       </div>
-      <div id="chat-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
-        <div id="chat-header">
-          <div class="av" id="chat-av">?</div>
-          <span id="chat-title">Chat</span>
-        </div>
-        <div id="msg-area"></div>
-        <div id="input-bar">
-          <textarea id="msg-input" placeholder="Type a message…" rows="1" onkeydown="handleKey(event)"></textarea>
-          <button id="send-btn" onclick="sendMessage()">Send</button>
-        </div>
+      <div id="msg-area"></div>
+      <div id="input-bar">
+        <textarea id="msg-input" placeholder="Type a message…" rows="1" onkeydown="handleKey(event)"></textarea>
+        <button id="send-btn" onclick="sendMessage()">Send</button>
       </div>
     </div>
   </div>
+</div>
 
 <script>
-const REPO  = 'PranayMahendrakar';
-const RNAME = 'whatsapp-baileys-bot';
-const RAW   = 'https://raw.githubusercontent.com/' + REPO + '/' + RNAME + '/main';
+const RAW = 'https://raw.githubusercontent.com/PranayMahendrakar/whatsapp-baileys-bot/main';
+let tunnelBase = null, currentJid = null, chats = {}, msgTimer = null, chatTimer = null;
+let lastCode = null;
 
-let tunnelBase = null;
-let currentJid = null;
-let chats = {};
-let qrExpireTimer = null;
-let qrCountdown = 30;
-let pollTimer = null;
-let msgPollTimer = null;
-
-// ── Poll status.json from repo (every 4s) ───────────────────────────────────
 async function pollStatus() {
   try {
     const r = await fetch(RAW + '/status.json?t=' + Date.now());
-    if (!r.ok) throw new Error('no status.json');
+    if (!r.ok) return;
     const s = await r.json();
+
+    const badge = document.getElementById('conn-badge');
+
+    if (s.error) {
+      document.getElementById('code-spinner').style.display = 'none';
+      document.getElementById('code-val').style.display = 'none';
+      const eb = document.getElementById('error-box');
+      eb.style.display = 'block';
+      eb.textContent = '❌ ' + s.error;
+      badge.textContent = '❌ Error';
+      document.getElementById('code-status').textContent = 'Fix the error and re-run the workflow.';
+      return;
+    }
 
     if (s.connected && s.url) {
       tunnelBase = s.url;
@@ -126,93 +150,47 @@ async function pollStatus() {
       return;
     }
 
-    // Show QR if available
-    const cs = document.getElementById('conn-status');
-    const spin = document.getElementById('qr-spinner');
-    const img = document.getElementById('qr-img');
-
-    if (s.qr) {
-      // QR is a base64 data URL embedded in status.json
-      img.src = s.qr;
-      img.style.display = 'block';
-      spin.style.display = 'none';
-      cs.textContent = '📱 Scan QR code';
-      cs.className = 'waiting';
-      document.getElementById('qr-status').innerHTML =
-        '📱 Scan with WhatsApp → <b>Settings → Linked Devices → Link a Device</b><br>' +
-        'QR refreshes automatically when it expires.';
-      // Start countdown
-      startQrCountdown();
+    if (s.pairingCode) {
+      if (s.pairingCode !== lastCode) {
+        lastCode = s.pairingCode;
+        document.getElementById('code-spinner').style.display = 'none';
+        document.getElementById('code-val').style.display = 'block';
+        document.getElementById('code-val').textContent = s.pairingCode;
+        badge.textContent = '🔑 Enter code';
+        badge.className = 'waiting';
+        document.getElementById('code-status').innerHTML =
+          '👆 Enter this code in WhatsApp → Settings → Linked Devices → Link a Device<br>' +
+          '→ tap <b style="color:#00a884">Link with phone number instead</b>';
+        document.getElementById('error-box').style.display = 'none';
+      }
     } else if (s.url) {
-      cs.textContent = '⏳ Bot starting…';
-      cs.className = '';
-      spin.style.display = 'block';
-      img.style.display = 'none';
-      document.getElementById('qr-status').textContent = '🔄 Bot is running, generating QR code…';
+      badge.textContent = '⏳ Generating code…';
+      document.getElementById('code-status').textContent = '🔄 Bot is running, requesting pairing code…';
     } else {
-      cs.textContent = '⏳ Bot offline';
-      cs.className = '';
-      spin.style.display = 'block';
-      img.style.display = 'none';
-      document.getElementById('qr-status').innerHTML =
-        '⚠️ Bot is not running.<br>Go to <a href="https://github.com/' + REPO + '/' + RNAME + '/actions" target="_blank" style="color:#00a884">GitHub Actions</a> and click <b>Run workflow</b>.';
+      badge.textContent = '⏳ Bot offline';
+      document.getElementById('code-status').innerHTML =
+        '⚠️ Bot is not running. Go to <a href="https://github.com/PranayMahendrakar/whatsapp-baileys-bot/actions" target="_blank" style="color:#00a884">GitHub Actions</a> → <b>Run workflow</b>.';
     }
-  } catch(e) {
-    document.getElementById('conn-status').textContent = '⏳ Loading…';
-  }
-}
-
-function startQrCountdown() {
-  if (qrExpireTimer) clearInterval(qrExpireTimer);
-  qrCountdown = 30;
-  updateCountdown();
-  qrExpireTimer = setInterval(() => {
-    qrCountdown--;
-    updateCountdown();
-    if (qrCountdown <= 0) {
-      clearInterval(qrExpireTimer);
-      qrExpireTimer = null;
-      document.getElementById('countdown').textContent = '🔄 Waiting for new QR…';
-      document.getElementById('qr-img').style.display = 'none';
-      document.getElementById('qr-spinner').style.display = 'block';
-    }
-  }, 1000);
-}
-
-function updateCountdown() {
-  const el = document.getElementById('countdown');
-  if (qrCountdown > 0) {
-    el.textContent = '⏱ Expires in ' + qrCountdown + 's';
-  }
+  } catch(e) {}
 }
 
 function showApp() {
-  if (qrExpireTimer) clearInterval(qrExpireTimer);
-  document.getElementById('qr-screen').style.display = 'none';
+  document.getElementById('pair-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
-  const cs = document.getElementById('conn-status');
-  cs.textContent = '🟢 Connected';
-  cs.className = 'connected';
+  const b = document.getElementById('conn-badge');
+  b.textContent = '🟢 Connected'; b.className = 'connected';
   loadChats();
-  if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(loadChats, 6000);
-  // Keep checking if bot disconnects
+  if (chatTimer) clearInterval(chatTimer);
+  chatTimer = setInterval(loadChats, 6000);
   setInterval(async () => {
-    try {
-      const r = await fetch(RAW + '/status.json?t=' + Date.now());
-      const s = await r.json();
-      if (!s.connected) location.reload();
-    } catch(_){}
+    try { const s = await (await fetch(RAW + '/status.json?t=' + Date.now())).json();
+      if (!s.connected) location.reload(); } catch(_) {}
   }, 15000);
 }
 
-// ── API helpers ─────────────────────────────────────────────────────────────
 async function api(path, opts) {
   if (!tunnelBase) return null;
-  const r = await fetch(tunnelBase + path, {
-    headers: {'Content-Type':'application/json'},
-    ...opts
-  });
+  const r = await fetch(tunnelBase + path, { headers: {'Content-Type':'application/json'}, ...opts });
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
@@ -221,30 +199,25 @@ async function loadChats() {
   try {
     const data = await api('/api/chats');
     if (!data) return;
-    chats = {};
-    data.forEach(c => { chats[c.jid] = c; });
+    chats = Object.fromEntries(data.map(c => [c.jid, c]));
     renderChatList(data);
-  } catch(e) { console.error('loadChats:', e); }
+  } catch(e) {}
 }
 
 function renderChatList(list) {
   const q = document.getElementById('search-input').value.toLowerCase();
-  const filtered = q ? list.filter(c => (c.name||c.jid).toLowerCase().includes(q)) : list;
-  document.getElementById('chat-list').innerHTML = filtered.map(c => {
+  const fl = q ? list.filter(c => (c.name||c.jid).toLowerCase().includes(q)) : list;
+  document.getElementById('chat-list').innerHTML = fl.map(c => {
     const name = c.name || c.jid.split('@')[0];
     const time = c.lastTimestamp ? new Date(c.lastTimestamp*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
     return `<div class="ci ${c.jid===currentJid?'active':''}" onclick="openChat('${esc(c.jid)}')">
       <div class="av">${esc(name[0].toUpperCase())}</div>
-      <div class="ci-info">
-        <div class="ci-name">${esc(name)}</div>
-        <div class="ci-preview">${esc(c.lastMessage||'')}</div>
-      </div>
-      <div class="ci-time">${time}</div>
-    </div>`;
+      <div class="ci-info"><div class="ci-name">${esc(name)}</div><div class="ci-preview">${esc(c.lastMessage||'')}</div></div>
+      <div class="ci-time">${time}</div></div>`;
   }).join('');
 }
 
-function filterChats(q) { renderChatList(Object.values(chats)); }
+function filterChats() { renderChatList(Object.values(chats)); }
 
 async function openChat(jid) {
   currentJid = jid;
@@ -253,57 +226,44 @@ async function openChat(jid) {
   document.getElementById('chat-title').textContent = name;
   document.getElementById('chat-av').textContent = name[0].toUpperCase();
   document.getElementById('no-chat-msg').style.display = 'none';
-  const cv = document.getElementById('chat-view');
-  cv.style.display = 'flex';
-  document.getElementById('send-btn').disabled = false;
+  document.getElementById('chat-view').style.display = 'flex';
   renderChatList(Object.values(chats));
-  await loadMessages(jid);
-  if (msgPollTimer) clearInterval(msgPollTimer);
-  msgPollTimer = setInterval(() => loadMessages(jid), 3000);
+  await loadMsgs(jid);
+  if (msgTimer) clearInterval(msgTimer);
+  msgTimer = setInterval(() => loadMsgs(jid), 3000);
 }
 
-async function loadMessages(jid) {
+async function loadMsgs(jid) {
   try {
     const msgs = await api('/api/chats/' + encodeURIComponent(jid) + '/messages');
     if (!msgs) return;
     const el = document.getElementById('msg-area');
-    const atBottom = el.scrollHeight - el.clientHeight <= el.scrollTop + 60;
+    const atBot = el.scrollHeight - el.clientHeight <= el.scrollTop + 60;
     el.innerHTML = msgs.map(m => {
       const time = m.timestamp ? new Date(m.timestamp*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
-      const sender = !m.fromMe && m.pushName ? `<div style="font-size:12px;color:#00a884;margin-bottom:2px">${esc(m.pushName)}</div>` : '';
-      return `<div class="msg ${m.fromMe?'out':'in'}">${sender}${esc(m.text)}<div class="ts">${time}</div></div>`;
+      const sndr = !m.fromMe && m.pushName ? `<div style="font-size:12px;color:#00a884;margin-bottom:2px">${esc(m.pushName)}</div>` : '';
+      return `<div class="msg ${m.fromMe?'out':'in'}">${sndr}${esc(m.text)}<div class="ts">${time}</div></div>`;
     }).join('');
-    if (atBottom) el.scrollTop = el.scrollHeight;
+    if (atBot) el.scrollTop = el.scrollHeight;
   } catch(e) {}
 }
 
 async function sendMessage() {
-  const input = document.getElementById('msg-input');
-  const text = input.value.trim();
+  const inp = document.getElementById('msg-input');
+  const text = inp.value.trim();
   if (!text || !currentJid) return;
-  input.value = '';
+  inp.value = '';
   document.getElementById('send-btn').disabled = true;
   try {
-    await api('/api/chats/' + encodeURIComponent(currentJid) + '/send', {
-      method: 'POST', body: JSON.stringify({ text })
-    });
-    await loadMessages(currentJid);
+    await api('/api/chats/' + encodeURIComponent(currentJid) + '/send', { method:'POST', body: JSON.stringify({text}) });
+    await loadMsgs(currentJid);
   } catch(e) { alert('Send failed: ' + e.message); }
-  finally {
-    document.getElementById('send-btn').disabled = false;
-    input.focus();
-  }
+  finally { document.getElementById('send-btn').disabled = false; inp.focus(); }
 }
 
-function handleKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-}
+function handleKey(e) { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-function esc(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-// ── Boot: poll status.json every 4s ─────────────────────────────────────────
 pollStatus();
 setInterval(pollStatus, 4000);
 </script>
