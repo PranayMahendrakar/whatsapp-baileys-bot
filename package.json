@@ -9,6 +9,7 @@
     "dev": "node --watch index.js"
   },
   "dependencies": {
+    "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^6.7.9",
     "pino": "^9.5.0",
     "qrcode-terminal": "^0.12.0"
