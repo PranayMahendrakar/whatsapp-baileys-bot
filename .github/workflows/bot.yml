@@ -1,61 +1,68 @@
-name: WhatsApp Baileys Bot
+name: WhatsApp Baileys Bot + Web UI
 
 on:
-  # Run on push to main branch
   push:
     branches: [ main ]
-
-  # Allow manual trigger from Actions tab
   workflow_dispatch:
-
-  # Keep bot running on schedule (every 6 hours as a keep-alive)
   schedule:
     - cron: '0 */6 * * *'
 
 jobs:
   run-bot:
-    name: Run WhatsApp Bot
+    name: Run WhatsApp Bot + Web UI
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. Checkout code ──────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Setup Node.js ──────────────────────────────────────────────────
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      # ── 3. Install dependencies ───────────────────────────────────────────
       - name: Install dependencies
         run: npm install
 
-      # ── 4. Restore WhatsApp auth session ─────────────────────────────────
-      #    Store the auth_info folder contents as a base64 secret named
-      #    WHATSAPP_AUTH_DATA in your repo Settings → Secrets → Actions
       - name: Restore WhatsApp session
         run: |
           mkdir -p auth_info
           if [ -n "${{ secrets.WHATSAPP_AUTH_DATA }}" ]; then
             echo "${{ secrets.WHATSAPP_AUTH_DATA }}" | base64 -d > auth_info.tar.gz
-            tar -xzf auth_info.tar.gz -C auth_info/
-            echo "✅ Session restored from secret"
+            tar -xzf auth_info.tar.gz -C auth_info/ || true
+            echo "Session restored"
           else
-            echo "⚠️  No session secret found. Bot will show QR code on first run."
-            echo "   After scanning QR locally, upload auth_info as WHATSAPP_AUTH_DATA secret."
+            echo "No session - bot will show QR"
           fi
 
-      # ── 5. Run the bot ────────────────────────────────────────────────────
-      - name: Start WhatsApp Bot
+      - name: Install ngrok
+        run: |
+          curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+          sudo apt-get update -qq && sudo apt-get install -y ngrok
+          if [ -n "${{ secrets.NGROK_AUTH_TOKEN }}" ]; then
+            ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+          fi
+
+      - name: Start ngrok tunnel
+        run: |
+          ngrok http 3000 --log=stdout > /tmp/ngrok.log 2>&1 &
+          sleep 5
+          URL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['tunnels'][0]['public_url'])" 2>/dev/null || echo "ngrok not available")
+          echo "======================================"
+          echo "WEB UI URL: $URL"
+          echo "Open this in your browser to see chats"
+          echo "======================================"
+        continue-on-error: true
+
+      - name: Start WhatsApp Bot + Web UI
         run: npm start
         env:
           LOG_LEVEL: info
-        timeout-minutes: 350   # GitHub Actions max = 6h; adjust as needed
+          PORT: 3000
+        timeout-minutes: 350
 
-      # ── 6. Save updated auth session back to artifact ─────────────────────
-      - name: Save WhatsApp session artifact
+      - name: Save session artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
