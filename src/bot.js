@@ -4,7 +4,6 @@
 import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
-  makeInMemoryStore,
   fetchLatestBaileysVersion,
   isJidBroadcast,
 } from '@whiskeysockets/baileys';
@@ -15,16 +14,10 @@ import { existsSync } from 'fs';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 const AUTH_FOLDER = './auth_info';
-const STORE_FILE  = './store.json';
 const LOG_LEVEL   = process.env.LOG_LEVEL || 'silent'; // 'silent' | 'info' | 'debug'
 
 // ─── Logger ─────────────────────────────────────────────────────────────────
 const logger = pino({ level: LOG_LEVEL });
-
-// ─── In-memory message store ─────────────────────────────────────────────────
-const store = makeInMemoryStore({ logger });
-store.readFromFile(STORE_FILE);
-setInterval(() => store.writeToFile(STORE_FILE), 10_000);
 
 // ─── Message Handler ─────────────────────────────────────────────────────────
 async function handleMessage(sock, msg) {
@@ -89,8 +82,6 @@ async function handleMessage(sock, msg) {
 
 // ─── Connection Handler ───────────────────────────────────────────────────────
 async function connectToWhatsApp(sock, saveCreds) {
-  store.bind(sock.ev);
-
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
