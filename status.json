@@ -1,1 +1,7 @@
-{"url": "https://val-buf-colleagues-give.trycloudflare.com", "ts": 1772718227, "connected": false}
+{
+  "url": "https://val-buf-colleagues-give.trycloudflare.com",
+  "ts": 1772718229,
+  "connected": false,
+  "pairingCode": null,
+  "error": "PHONE_NUMBER secret not set"
+}
