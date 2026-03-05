@@ -1,125 +1,84 @@
-// src/server.js - Express Web UI API Server
-// Provides REST + SSE endpoints so the chat UI can read/send WhatsApp messages
+// src/bot.js - WhatsApp Baileys Bot integrated with Web UI
+import makeWASocket, { DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion, isJidBroadcast, getContentType } from '@whiskeysockets/baileys';
+import pino from 'pino';
+import { Boom } from '@hapi/boom';
+import { mkdir } from 'fs/promises';
+import { existsSync } from 'fs';
+import { setSocket, storeMessage } from './server.js';
 
-import express from 'express';
-import cors from 'cors';
-import path from 'path';
-import { fileURLToPath } from 'url';
+const AUTH_FOLDER = './auth_info';
+const logger = pino({ level: process.env.LOG_LEVEL || 'silent' });
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PORT = process.env.PORT || 3000;
+function extractText(message) {
+  if (!message) return '';
+  const type = getContentType(message);
+  if (!type) return '';
+  const msg = message[type];
+  if (type === 'conversation') return msg || '';
+  if (type === 'extendedTextMessage') return msg?.text || '';
+  if (type === 'imageMessage') return msg?.caption || '[Image]';
+  if (type === 'videoMessage') return msg?.caption || '[Video]';
+  if (type === 'audioMessage') return '[Voice message]';
+  if (type === 'documentMessage') return '[Document: ' + (msg?.fileName || 'file') + ']';
+  if (type === 'stickerMessage') return '[Sticker]';
+  return '[' + type + ']';
+}
 
-// ─── In-memory store ──────────────────────────────────────────────────────────
-// conversations: Map<jid, { id, name, phone, lastMsg, unread, messages[] }>
-export const conversations = new Map();
-// SSE clients for real-time push
-const sseClients = new Set();
-
-// ─── Helpers exposed to bot.js ────────────────────────────────────────────────
-let _sockRef = null;
-export function setSocket(sock) { _sockRef = sock; }
-
-export function storeMessage({ jid, id, name, phone, text, fromMe, timestamp }) {
-  if (!conversations.has(jid)) {
-    conversations.set(jid, { id: jid, name: name || phone, phone, unread: 0, messages: [] });
+async function handleMessage(sock, msg) {
+  const { key, message, pushName } = msg;
+  if (!message || isJidBroadcast(key.remoteJid)) return;
+  const text = extractText(message);
+  const from = key.remoteJid;
+  const isGroup = from.endsWith('@g.us');
+  const phone = (key.participant || from).split('@')[0].replace(/[^0-9]/g, '');
+  const name = pushName || phone;
+  storeMessage({ jid: from, id: key.id, name: isGroup ? name + ' (group)' : name, phone, text: text || '', fromMe: false, timestamp: msg.messageTimestamp ? Number(msg.messageTimestamp) * 1000 : Date.now() });
+  console.log('[' + (isGroup ? 'Group' : 'DM') + '] ' + name + ': ' + text);
+  const lower = text.toLowerCase().trim();
+  let reply = null;
+  if (lower === '!ping') reply = 'Pong! Bot is alive.';
+  else if (lower === '!help') reply = 'Commands: !ping !help !info !time !echo <text>';
+  else if (lower === '!info') reply = 'Baileys Bot v2 | Educational | PranayMahendrakar';
+  else if (lower === '!time') reply = 'Time: ' + new Date().toLocaleString();
+  else if (lower.startsWith('!echo ')) reply = text.slice(6).trim();
+  if (reply) {
+    await sock.sendMessage(from, { text: reply }, { quoted: msg });
+    storeMessage({ jid: from, id: key.id + '_r', name: 'Bot', phone: null, text: reply, fromMe: true, timestamp: Date.now() });
   }
-  const convo = conversations.get(jid);
-  convo.name    = name || convo.name || phone;
-  convo.phone   = phone || convo.phone;
-  convo.lastMsg = text;
-  convo.lastTs  = timestamp;
-  if (!fromMe) convo.unread = (convo.unread || 0) + 1;
-  convo.messages.push({ id, text, fromMe, timestamp, status: fromMe ? 'sent' : 'received' });
-  // Keep last 200 messages per chat
-  if (convo.messages.length > 200) convo.messages.shift();
-  broadcastSSE({ type: 'message', jid, message: { id, text, fromMe, timestamp } });
 }
 
-export function markRead(jid) {
-  if (conversations.has(jid)) conversations.get(jid).unread = 0;
-}
-
-function broadcastSSE(data) {
-  const payload = `data: ${JSON.stringify(data)}
-
-`;
-  sseClients.forEach(res => { try { res.write(payload); } catch(_) {} });
-}
-
-// ─── Express App ─────────────────────────────────────────────────────────────
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-// Serve static files (the chat UI)
-app.use(express.static(path.join(__dirname, '..', 'public')));
-
-// ── GET /api/chats - list all conversations ───────────────────────────────────
-app.get('/api/chats', (_req, res) => {
-  const list = Array.from(conversations.values())
-    .map(c => ({
-      id:      c.id,
-      name:    c.name,
-      phone:   c.phone,
-      lastMsg: c.lastMsg || '',
-      lastTs:  c.lastTs  || 0,
-      unread:  c.unread  || 0,
-    }))
-    .sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
-  res.json(list);
-});
-
-// ── GET /api/chats/:jid/messages - get messages for a chat ───────────────────
-app.get('/api/chats/:jid/messages', (req, res) => {
-  const jid  = decodeURIComponent(req.params.jid);
-  const convo = conversations.get(jid);
-  if (!convo) return res.json([]);
-  markRead(jid);
-  broadcastSSE({ type: 'read', jid });
-  res.json(convo.messages);
-});
-
-// ── POST /api/chats/:jid/send - send a message ────────────────────────────────
-app.post('/api/chats/:jid/send', async (req, res) => {
-  const jid  = decodeURIComponent(req.params.jid);
-  const { text } = req.body;
-  if (!text || !text.trim()) return res.status(400).json({ error: 'text required' });
-  if (!_sockRef) return res.status(503).json({ error: 'WhatsApp not connected' });
-  try {
-    const sent = await _sockRef.sendMessage(jid, { text: text.trim() });
-    const ts   = Date.now();
-    storeMessage({ jid, id: sent.key.id, name: null, phone: null, text: text.trim(), fromMe: true, timestamp: ts });
-    res.json({ ok: true, id: sent.key.id });
-  } catch (err) {
-    console.error('Send error:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── GET /api/status - connection status ──────────────────────────────────────
-app.get('/api/status', (_req, res) => {
-  res.json({ connected: !!_sockRef, ts: Date.now() });
-});
-
-// ── GET /api/events - SSE stream for real-time updates ───────────────────────
-app.get('/api/events', (req, res) => {
-  res.setHeader('Content-Type',  'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection',    'keep-alive');
-  res.flushHeaders();
-  res.write(`data: ${JSON.stringify({ type: 'connected' })}
-
-`);
-  sseClients.add(res);
-  req.on('close', () => sseClients.delete(res));
-});
-
-// ─── Start Server ─────────────────────────────────────────────────────────────
-export function startServer() {
-  return new Promise(resolve => {
-    app.listen(PORT, () => {
-      console.log(`\n🌐 Web UI running at http://localhost:${PORT}`);
-      resolve();
-    });
+async function connectToWhatsApp(sock, saveCreds) {
+  sock.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect, qr } = update;
+    if (qr) {
+      const { default: qrcode } = await import('qrcode-terminal');
+      qrcode.generate(qr, { small: true });
+      console.log('Scan QR with WhatsApp');
+    }
+    if (connection === 'close') {
+      setSocket(null);
+      const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
+      if (reason === DisconnectReason.badSession || reason === DisconnectReason.loggedOut) { console.log('Session invalid.'); process.exit(1); }
+      console.log('Reconnecting in 3s...');
+      setTimeout(() => startBot(), 3000);
+    }
+    if (connection === 'open') {
+      setSocket(sock);
+      console.log('Connected! User: ' + sock.user?.name + ' | ' + sock.user?.id);
+    }
   });
+  sock.ev.on('creds.update', saveCreds);
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify') return;
+    for (const msg of messages) { if (!msg.key.fromMe) await handleMessage(sock, msg); }
+  });
+}
+
+export async function startBot() {
+  if (!existsSync(AUTH_FOLDER)) await mkdir(AUTH_FOLDER, { recursive: true });
+  const { version } = await fetchLatestBaileysVersion();
+  const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
+  const sock = makeWASocket({ version, logger, auth: state, printQRInTerminal: false, browser: ['WhatsApp Bot', 'Chrome', '120.0.0'], markOnlineOnConnect: false });
+  await connectToWhatsApp(sock, saveCreds);
+  return sock;
 }
