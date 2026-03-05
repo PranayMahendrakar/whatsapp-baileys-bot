@@ -1,14 +1,9 @@
 'use strict';
 /**
- * bot-runner.js — uses PAIRING CODE (not QR) for reliable headless linking.
- * 
- * How it works:
- * 1. Bot starts, generates an 8-digit pairing code
- * 2. Pairing code is written to status.json and pushed to GitHub
- * 3. GitHub Pages shows the code — user enters it in WhatsApp
- * 4. WhatsApp links and bot connects
- * 
- * Phone number is read from the PHONE_NUMBER env/secret (e.g. 916361723454)
+ * bot-runner.js — PAIRING CODE method (reliable for headless/remote bots)
+ * The pairing code request must happen AFTER connection is open but BEFORE
+ * the socket disconnects due to timeout — so we request it on 'connecting'
+ * state using a proven pattern.
  */
 
 const path   = require('path');
@@ -51,7 +46,7 @@ function writeStatus(data) {
   const url = getTunnelUrl();
   const payload = { url, ts: Math.floor(Date.now()/1000), ...data };
   fs.writeFileSync('status.json', JSON.stringify(payload, null, 2));
-  console.log('[status]', JSON.stringify(payload).slice(0, 120));
+  console.log('[status]', JSON.stringify(payload).slice(0, 150));
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -79,42 +74,47 @@ async function startBot() {
       keys: makeCacheableSignalKeyStore(state.keys, logger),
     },
     browser: Browsers.ubuntu('Chrome'),
-    // Do NOT use printQRInTerminal — we use pairing code
     printQRInTerminal: false,
     generateHighQualityLinkPreview: false,
   });
 
   setSocket(sock);
 
-  // ── Request pairing code once socket opens ─────────────────────────────────
-  let pairingRequested = false;
-  sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect, isNewLogin } = update;
-
-    // As soon as socket is open and not yet registered, request pairing code
-    if (!pairingRequested && !sock.authState.creds.registered) {
-      pairingRequested = true;
-      const phone = (process.env.PHONE_NUMBER || '').replace(/[^0-9]/g, '');
-      if (!phone) {
-        console.error('[runner] ❌ PHONE_NUMBER secret not set! Add it in Settings → Secrets.');
-        writeStatus({ connected: false, pairingCode: null, error: 'PHONE_NUMBER secret not set' });
-        gitPush(['status.json'], 'chore: error - phone number missing');
-        process.exit(1);
-      }
-      try {
-        console.log('[runner] Requesting pairing code for +' + phone + '...');
-        const code = await sock.requestPairingCode(phone);
-        // Format as XXXX-XXXX for readability
-        const formatted = code.match(/.{1,4}/g).join('-');
-        console.log('[runner] ✅ Pairing code:', formatted);
-        writeStatus({ connected: false, pairingCode: formatted, error: null });
-        gitPush(['status.json'], 'chore: pairing code ready');
-      } catch (err) {
-        console.error('[runner] Pairing code error:', err.message);
-        writeStatus({ connected: false, pairingCode: null, error: err.message });
-        gitPush(['status.json'], 'chore: pairing code failed');
-      }
+  // ── Request pairing code right after socket is created ────────────────────
+  // The correct pattern: request it BEFORE connection.update fires 'close',
+  // using a small delay to let Baileys initialise the handshake.
+  if (!sock.authState.creds.registered) {
+    const phone = (process.env.PHONE_NUMBER || '').replace(/[^0-9]/g, '');
+    if (!phone) {
+      console.error('[runner] ❌ PHONE_NUMBER secret not set!');
+      writeStatus({ connected: false, pairingCode: null, error: 'PHONE_NUMBER secret not set. Add it in GitHub Settings → Secrets.' });
+      gitPush(['status.json'], 'chore: error phone number missing');
+      process.exit(1);
     }
+
+    // Wait a moment for socket handshake, then request
+    await new Promise(res => setTimeout(res, 3000));
+
+    try {
+      console.log('[runner] Requesting pairing code for +' + phone + '…');
+      const code = await sock.requestPairingCode(phone);
+      const formatted = code.match(/.{1,4}/g).join('-');
+      console.log('[runner] ✅ Pairing code:', formatted);
+      writeStatus({ connected: false, pairingCode: formatted, error: null });
+      gitPush(['status.json'], 'chore: pairing code ready');
+    } catch (err) {
+      console.error('[runner] Pairing code request failed:', err.message);
+      writeStatus({ connected: false, pairingCode: null, error: 'Pairing code failed: ' + err.message });
+      gitPush(['status.json'], 'chore: pairing code failed');
+      // Retry after 5s
+      setTimeout(startBot, 5000);
+      return;
+    }
+  }
+
+  // ── Connection events ──────────────────────────────────────────────────────
+  sock.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect } = update;
 
     if (connection === 'close') {
       const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
@@ -123,7 +123,6 @@ async function startBot() {
       gitPush(['status.json'], 'chore: connection closed');
 
       if (reason !== DisconnectReason.loggedOut) {
-        pairingRequested = false; // allow re-requesting on reconnect
         console.log('[runner] Reconnecting in 5s…');
         setTimeout(startBot, 5000);
       } else {
